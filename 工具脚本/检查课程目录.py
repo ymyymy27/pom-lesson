@@ -63,6 +63,15 @@ def check():
         path = (ROOT / project["path"]).resolve()
         if project["hours"] != 24 or not path.is_relative_to(ROOT) or not path.is_file():
             errors.append(f"invalid elective project: {project['direction']}")
+        if not project.get("stage") or not project.get("prerequisites"):
+            errors.append(f"missing project stage or prerequisites: {project['direction']}")
+        for item in [project] + project.get("milestones", []):
+            for prerequisite in item.get("prerequisites", []):
+                if prerequisite not in by_id:
+                    errors.append(f"missing project prerequisite: {project['direction']} -> {prerequisite}")
+            path = (ROOT / item["path"]).resolve()
+            if not path.is_relative_to(ROOT) or not path.is_file():
+                errors.append(f"missing project milestone path: {item['path']}")
     return errors, len(courses)
 
 

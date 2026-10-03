@@ -1003,22 +1003,68 @@
     {
       "direction": "W",
       "hours": 24,
-      "path": "04-项目实践/01-TaskFlow校园任务助手/课程说明.md"
+      "path": "04-项目实践/01-TaskFlow校园任务助手/课程说明.md",
+      "stage": "方向后期综合实践；前五单元通过后开始，第六单元组织交付",
+      "prerequisites": [
+        "W05"
+      ],
+      "milestones": [
+        {
+          "title": "内存列表",
+          "prerequisites": [
+            "B14"
+          ],
+          "path": "04-项目实践/01-TaskFlow校园任务助手/第一版-内存列表/任务说明.md"
+        },
+        {
+          "title": "JSON文件保存",
+          "prerequisites": [
+            "B18"
+          ],
+          "path": "04-项目实践/01-TaskFlow校园任务助手/第二版-JSON文件保存/任务说明.md"
+        },
+        {
+          "title": "SQLite与协作",
+          "prerequisites": [
+            "B29"
+          ],
+          "path": "04-项目实践/01-TaskFlow校园任务助手/第三版-SQLite与协作/任务说明.md"
+        },
+        {
+          "title": "Django网页应用",
+          "prerequisites": [
+            "W05"
+          ],
+          "path": "04-项目实践/01-TaskFlow校园任务助手/第四版-Django网页应用/任务说明.md"
+        }
+      ]
     },
     {
       "direction": "A",
       "hours": 24,
-      "path": "04-项目实践/02-RAG课程资料问答助手/课程说明.md"
+      "path": "04-项目实践/02-RAG课程资料问答助手/课程说明.md",
+      "stage": "方向后期综合实践；前五单元通过后开始，第六单元组织交付",
+      "prerequisites": [
+        "A05"
+      ]
     },
     {
       "direction": "D",
       "hours": 24,
-      "path": "04-项目实践/03-校园数据分析/课程说明.md"
+      "path": "04-项目实践/03-校园数据分析/课程说明.md",
+      "stage": "方向后期综合实践；前五单元通过后开始，第六单元组织交付",
+      "prerequisites": [
+        "D05"
+      ]
     },
     {
       "direction": "F",
       "hours": 24,
-      "path": "02-方向选修/04-Flutter移动应用开发/起步工程/课程说明.md"
+      "path": "02-方向选修/04-Flutter移动应用开发/起步工程/课程说明.md",
+      "stage": "方向后期综合实践；前五单元通过后开始，第六单元组织交付",
+      "prerequisites": [
+        "F05"
+      ]
     }
   ]
 }
