@@ -1,0 +1,173 @@
+# 第 03 节：JWT 认证与会话
+
+## 本节目标
+
+- 完成登录/登出流程与 Token 存储
+- 实现 Access Token 过期自动刷新
+- 处理 401 并发竞态
+
+## 一、登录流程
+
+```dart
+class AuthRepository {
+  AuthRepository(this._dio);
+  final Dio _dio;
+
+  Future<AuthSession> login(String email, String password) async {
+    final resp = await _dio.post('/api/auth/login/', data: {
+      'email': email,
+      'password': password,
+    });
+    final data = resp.data as Map<String, dynamic>;
+    return AuthSession(
+      access: data['access'] as String,
+      refresh: data['refresh'] as String,
+      user: User.fromJson(data['user'] as Map<String, dynamic>),
+    );
+  }
+}
+```
+
+## 二、AuthNotifier：会话状态
+
+```dart
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    // 启动时恢复会话
+    _restore();
+    return const AuthState.unauthenticated();
+  }
+
+  Future<void> login(String email, String password) async {
+    final repo = ref.read(authRepositoryProvider);
+    final session = await repo.login(email, password);
+    await ref.read(tokenStorageProvider).saveTokens(
+      access: session.access,
+      refresh: session.refresh,
+    );
+    state = AuthState.authenticated(session.user);
+  }
+
+  Future<void> logout() async {
+    await ref.read(tokenStorageProvider).clear();
+    state = const AuthState.unauthenticated();
+  }
+}
+
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
+```
+
+## 三、401 自动刷新（核心难点）
+
+Access Token 过期后请求返回 401，拦截器应该：**用 Refresh Token 换新 Access Token，然后重放原请求**。
+
+```dart
+class RefreshInterceptor extends Interceptor {
+  RefreshInterceptor({required this.dio, required this.storage});
+  final Dio dio;
+  final TokenStorage storage;
+
+  bool _refreshing = false;
+  final _queue = <(RequestOptions, ErrorInterceptorHandler)>[];
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final is401 = err.response?.statusCode == 401;
+    final isRefresh = err.requestOptions.path.contains('/auth/refresh/');
+
+    if (!is401 || isRefresh) return handler.next(err);
+
+    if (_refreshing) {
+      // 已有请求在刷新，排队等它完成
+      _queue.add((err.requestOptions, handler));
+      return;
+    }
+
+    _refreshing = true;
+    try {
+      final refreshToken = await storage.getRefreshToken();
+      if (refreshToken == null) throw const ApiException(message: '未登录');
+
+      final resp = await dio.post('/api/auth/refresh/', data: {
+        'refresh': refreshToken,
+      });
+      final newAccess = (resp.data as Map<String, dynamic>)['access'] as String;
+      await storage.saveAccessToken(newAccess);
+
+      // 重放当前请求 + 排队的请求
+      err.requestOptions.headers['Authorization'] = 'Bearer $newAccess';
+      final retried = await dio.fetch(err.requestOptions);
+      handler.resolve(retried);
+
+      for (final (opts, h) in _queue) {
+        opts.headers['Authorization'] = 'Bearer $newAccess';
+        try {
+          h.resolve(await dio.fetch(opts));
+        } catch (e) {
+          h.reject(e as DioException, true);
+        }
+      }
+      _queue.clear();
+    } catch (e) {
+      handler.next(err);
+      for (final (_, h) in _queue) {
+        h.reject(err, true);
+      }
+      _queue.clear();
+    } finally {
+      _refreshing = false;
+    }
+  }
+}
+```
+
+为什么要"排队"？
+
+```text
+并发 5 个请求同时 401
+  ↓
+只刷新一次 Token（_refreshing 锁）
+  ↓
+其余 4 个等待，刷新成功后统一重放
+```
+
+如果不加锁，5 个请求会触发 5 次刷新，Refresh Token 可能因重复使用而失效。
+
+## 四、会话恢复与启动引导
+
+```dart
+// 启动时：有 token → 拉取用户信息 → 进入主页；否则 → 登录页
+Future<void> _restore() async {
+  final access = await storage.getAccessToken();
+  if (access == null) return;
+  try {
+    final user = await repo.me();
+    state = AuthState.authenticated(user);
+  } on ApiException {
+    await logout();            // token 失效则清空
+  }
+}
+```
+
+## 五、安全注意事项
+
+- Refresh Token 只放 secure_storage，绝不进日志
+- 刷新失败（Refresh 也失效）→ 强制登出，跳登录页
+- 登录页不要用 `context.go` 返回上一页残留
+- 本地时间不要参与过期判断，以服务器 401 为准
+
+## 动手练习
+
+1. 实现登录/登出 + 会话恢复
+2. 实现 RefreshInterceptor 与并发队列
+3. 用 DevTools Network 面板验证：Token 过期后只发生一次 refresh 请求
+
+## 验收标准
+
+- 重启 App 后登录态自动恢复
+- 401 自动刷新且用户无感知
+- 并发请求只触发一次刷新

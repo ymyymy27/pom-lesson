@@ -1,0 +1,306 @@
+# 第1课：Git 基础 - 安装配置与基本操作
+
+## 1. Git 是什么？
+
+### 一句话解释
+**Git 就是代码的"时光机"** —— 记录每次修改，随时可以回到过去的任何版本。
+
+### 类比理解
+| 你熟悉的 | Git 概念 |
+|---------|---------|
+| Word 的"撤销"按钮 | `git checkout` 回退文件 |
+| 游戏的"存档" | `git commit` 提交快照 |
+| 文件夹复制备份（v1、v2...） | Git 自动管理所有版本 |
+| 多人编辑同一个 Google Doc | `git merge` 合并多人修改 |
+
+### 为什么需要 Git？
+
+没有 Git：
+```
+项目_v1/
+项目_v2_修复bug/
+项目_v3_小明改的/
+项目_v3_最终版/
+项目_v3_最终版_真的最终/
+项目_v3_打死不改了/
+```
+
+有了 Git：
+```
+项目/
+  .git/    ← Git 自动管理所有历史版本
+```
+
+---
+
+## 2. 安装与配置
+
+### 安装
+
+**Windows：**
+```bash
+# 下载安装包
+# https://git-scm.com/download/win
+# 安装时全部默认即可
+
+# 验证
+git --version
+# git version 2.44.0.windows.1
+```
+
+**Mac：**
+```bash
+# 自带或通过 Homebrew
+brew install git
+```
+
+### 首次配置（必须！）
+
+```bash
+# 设置用户名和邮箱（每次提交都会记录）
+git config --global user.name "你的名字"
+git config --global user.email "你的邮箱@example.com"
+
+# 查看配置
+git config --list
+
+# 设置默认分支名为 main（推荐）
+git config --global init.defaultBranch main
+
+# 设置默认编辑器（可选）
+git config --global core.editor "code --wait"   # VS Code
+```
+
+### 配置级别
+
+| 级别 | 命令 | 作用范围 | 文件位置 |
+|------|------|---------|---------|
+| system | `--system` | 所有用户 | /etc/gitconfig |
+| global | `--global` | 当前用户 | ~/.gitconfig |
+| local | `--local` | 当前仓库 | .git/config |
+
+优先级：local > global > system
+
+---
+
+## 3. 核心概念
+
+### Git 的三个区域
+
+```
+工作区（Working Directory）     暂存区（Staging Area）     仓库（Repository）
+  你正在编辑的文件                准备提交的文件              已保存的历史版本
+       │                            │                          │
+       │  git add →                 │  git commit →            │
+       │                            │                          │
+       │  ← git checkout            │                          │
+```
+
+**理解方式：**
+- **工作区**：你看到的文件夹，正在编辑的代码
+- **暂存区**：购物车（选好了但还没付款）
+- **仓库**：已付款的订单（永久保存的快照）
+
+### 文件状态
+
+```
+Untracked → Staged → Committed
+ (新文件)    (已暂存)   (已提交)
+              ↑
+          Modified
+          (已修改)
+```
+
+---
+
+## 4. 基本操作
+
+### 4.1 创建仓库
+
+```bash
+# 方法1：在当前目录初始化
+mkdir my-project
+cd my-project
+git init
+# 输出：Initialized empty Git repository in .../my-project/.git/
+
+# 方法2：克隆远程仓库
+git clone https://github.com/user/repo.git
+```
+
+### 4.2 查看状态（最常用！）
+
+```bash
+git status
+```
+
+输出示例：
+```
+On branch main
+Changes not staged for commit:
+  modified:   app.py          ← 修改了但没暂存
+
+Untracked files:
+  utils.py                    ← 新文件，Git 还没跟踪
+```
+
+**简洁模式：**
+```bash
+git status -s
+# M  app.py      ← M = Modified
+# ?? utils.py    ← ?? = Untracked
+```
+
+### 4.3 添加到暂存区
+
+```bash
+git add 文件名           # 添加单个文件
+git add app.py utils.py  # 添加多个文件
+git add .                # 添加当前目录所有改动（最常用）
+git add *.py             # 添加所有 .py 文件
+```
+
+### 4.4 提交
+
+```bash
+git commit -m "描述这次修改做了什么"
+```
+
+**好的提交信息：**
+```bash
+git commit -m "修复用户登录时密码校验bug"     ✓ 清晰
+git commit -m "更新"                          ✗ 太模糊
+git commit -m "改了一些东西"                   ✗ 没有信息量
+```
+
+**快捷方式（跳过 add，直接提交已跟踪文件的修改）：**
+```bash
+git commit -am "修复bug"     # -a 自动暂存已跟踪文件的修改
+```
+
+### 4.5 查看提交历史
+
+```bash
+git log                    # 完整日志
+git log --oneline          # 单行模式（推荐）
+git log --oneline -5       # 只看最近5条
+git log --graph --oneline  # 图形化显示分支
+```
+
+输出示例（`git log --oneline`）：
+```
+a1b2c3d 修复用户登录bug
+e4f5g6h 添加注册功能
+i7j8k9l 初始化项目
+```
+
+### 4.6 查看修改内容
+
+```bash
+git diff                   # 工作区 vs 暂存区（还没 add 的改动）
+git diff --staged          # 暂存区 vs 最新提交（已 add 但没 commit 的）
+git diff HEAD              # 工作区 vs 最新提交
+```
+
+---
+
+## 5. .gitignore 文件
+
+告诉 Git 忽略哪些文件，不要跟踪它们：
+
+```bash
+# .gitignore 文件内容
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 环境变量（含密钥！）
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 数据文件
+*.csv
+*.db
+data/
+```
+
+**重要：** `.gitignore` 只对**还没被 Git 跟踪的文件**生效。如果文件已经被提交过，需要先移除跟踪：
+```bash
+git rm --cached 文件名     # 从 Git 中删除跟踪，但保留本地文件
+```
+
+---
+
+## 6. 完整工作流示例
+
+```bash
+# 1. 创建项目
+mkdir demo && cd demo
+git init
+
+# 2. 创建文件
+echo "print('hello')" > app.py
+
+# 3. 查看状态
+git status
+# ?? app.py
+
+# 4. 添加到暂存区
+git add app.py
+
+# 5. 提交
+git commit -m "初始化项目，添加 app.py"
+
+# 6. 修改文件
+echo "print('world')" >> app.py
+
+# 7. 查看改了什么
+git diff
+
+# 8. 再次提交
+git add .
+git commit -m "添加 world 输出"
+
+# 9. 查看历史
+git log --oneline
+```
+
+---
+
+## 7. 动手练习
+
+1. 在桌面创建 `git-demo` 文件夹，初始化为 Git 仓库
+2. 创建 `hello.py`，写入 `print("Hello Git")`，提交
+3. 修改 `hello.py`，添加第二行，用 `git diff` 查看变化，再提交
+4. 用 `git log --oneline` 查看你的提交历史
+5. 创建 `.gitignore`，忽略 `__pycache__/` 和 `.env`
+
+---
+
+## 8. 小结
+
+| 命令 | 作用 |
+|------|------|
+| `git init` | 初始化仓库 |
+| `git status` | 查看状态 |
+| `git add .` | 暂存所有改动 |
+| `git commit -m "信息"` | 提交 |
+| `git log --oneline` | 查看历史 |
+| `git diff` | 查看改动 |
+
+**记住这个流程：** `编辑 → add → commit → 重复`
+
+---
+
+**下一课：** `02_branch_and_merge.md` - 分支管理与合并

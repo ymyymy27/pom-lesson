@@ -1,0 +1,28 @@
+# Prompt Engineering 从零开始深入学习教程
+
+## 课程目录
+
+| 课程 | 文件 | 内容 |
+|------|------|------|
+| 第1课 | `01_prompt_basics.py` | Prompt 基础（结构/原则/参数控制） |
+| 第2课 | `02_few_shot_and_cot.py` | Few-shot / CoT / 高级推理技巧 |
+| 第3课 | `03_structured_output.py` | 结构化输出（JSON/XML/表格/代码） |
+| 第4课 | `04_role_and_system.py` | 角色设计与 System Prompt |
+| 第5课 | `05_prompt_patterns.py` | Prompt 设计模式大全 |
+| 第6课 | `06_prompt_optimization.py` | Prompt 优化与评估 |
+| 第7课 | `07_prompt_project.py` | 完整项目：自动化 Prompt 工程平台 |
+
+## 环境配置
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+# 本地模型（推荐）
+ollama pull qwen2.5:7b
+```
+
+## 学习方式
+
+按顺序学习，每个文件可直接运行：`python 01_prompt_basics.py`

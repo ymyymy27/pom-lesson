@@ -1,0 +1,199 @@
+# 第6课：集成测试
+
+## 1. 单元测试 vs 集成测试
+
+### 一句话解释
+
+**集成测试 = 让多个真实组件一起跑** —— 验证模块协作是否正确，比单元测试慢，但更接近生产。
+
+| 维度 | 单元测试 | 集成测试 |
+|------|----------|----------|
+| 范围 | 单个函数/类 | 多模块 + 真实/近似真实依赖 |
+| 速度 | 毫秒 | 秒级 |
+| Mock | 大量 Mock 外部 | 少 Mock，用真实 DB/API |
+| 标记 | 默认 | 建议 `@pytest.mark.integration` |
+
+```
+单元测试：UserService.create → Mock Repository
+集成测试：HTTP POST /users → Service → SQLite → 响应 JSON
+```
+
+---
+
+## 2. 测试 HTTP API（FastAPI + TestClient）
+
+```python
+# src/app/main.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class UserCreate(BaseModel):
+    name: str
+    email: str
+
+users_db = []
+
+@app.post("/users", status_code=201)
+def create_user(user: UserCreate):
+    users_db.append(user.model_dump())
+    return user
+
+@app.get("/users/{user_id}")
+def get_user(user_id: int):
+    if user_id >= len(users_db):
+        return {"error": "not found"}
+    return users_db[user_id]
+```
+
+```python
+# tests/test_api.py
+import pytest
+from fastapi.testclient import TestClient
+from app.main import app
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+@pytest.fixture(autouse=True)
+def clear_db():
+    from app.main import users_db
+    users_db.clear()
+    yield
+    users_db.clear()
+
+def test_create_user(client):
+    response = client.post("/users", json={"name": "Alice", "email": "a@b.com"})
+    assert response.status_code == 201
+    assert response.json()["name"] == "Alice"
+
+def test_get_user_not_found(client):
+    response = client.get("/users/999")
+    assert response.json()["error"] == "not found"
+```
+
+**运行：**
+
+```bash
+pytest tests/test_api.py -v
+```
+
+---
+
+## 3. 测试数据库（SQLite 内存库）
+
+```python
+# tests/conftest.py
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from models import Base, User
+
+@pytest.fixture(scope="function")
+def db_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+    yield session
+    session.close()
+    engine.dispose()
+
+@pytest.fixture
+def user_repo(db_session):
+    from repositories import UserRepository
+    return UserRepository(db_session)
+```
+
+```python
+# tests/test_user_repo.py
+@pytest.mark.integration
+def test_create_and_find(user_repo):
+    user = user_repo.create(name="Test", email="t@t.com")
+    found = user_repo.find_by_id(user.id)
+    assert found.name == "Test"
+```
+
+---
+
+## 4. fixture 分层策略
+
+```
+tests/
+├── conftest.py           # client、db_session（integration 用）
+├── unit/
+│   └── test_service.py   # Mock repo，纯单元
+└── integration/
+    └── test_api.py       # 真实 DB + HTTP
+```
+
+```bash
+pytest tests/unit/                    # 快速反馈
+pytest tests/integration/ -m integration
+pytest -m "not integration"           # 日常开发
+```
+
+---
+
+## 5. 测试外部 API
+
+**原则：** 不依赖真实第三方 API（慢、不稳定、可能收费）
+
+| 策略 | 做法 |
+|------|------|
+| Mock | `mocker.patch("requests.get")` |
+| 录制回放 | VCR.py 录一次，之后回放 |
+| 契约测试 | 只测自己的解析逻辑 |
+
+```python
+def test_parse_weather_response():
+    raw = {"main": {"temp": 25.5}}
+    result = parse_weather(raw)
+    assert result.temperature == pytest.approx(25.5)
+```
+
+---
+
+## 6. 测试 CLI
+
+```python
+from click.testing import CliRunner
+
+def test_cli_help():
+    runner = CliRunner()
+    result = runner.invoke(main, ["--help"])
+    assert result.exit_code == 0
+    assert "Usage" in result.output
+```
+
+---
+
+## 7. 集成测试最佳实践
+
+1. **标记分离**：`-m "not integration"` 用于本地快速循环
+2. **独立数据**：每个测试用 fixture 建表/清数据
+3. **真实边界**：在模块边界测（HTTP 入口、Repository 出口）
+4. **少而精**：覆盖关键路径，不追求全链路 E2E
+5. **CI 分层**：PR 跑 unit；merge 前跑 integration
+
+---
+
+## 8. 练习
+
+1. 为 `practice` 中的 FastAPI 应用编写 CRUD 集成测试
+2. 给集成测试加 `@pytest.mark.integration`
+3. 配置：`pytest -m "not integration"` 与 `pytest -m integration` 分别运行
+
+---
+
+## 9. 自检清单
+
+- [ ] 能区分单元与集成测试的边界
+- [ ] 会用 FastAPI `TestClient` 测 API
+- [ ] 会用 SQLite 内存库做 Repository 集成测试
+- [ ] 集成测试有独立数据 fixture
+- [ ] 知道为何不直接调真实第三方 API
+
+👉 下一课：[07_practical_project.md](07_practical_project.md)

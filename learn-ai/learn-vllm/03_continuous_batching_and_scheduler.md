@@ -1,0 +1,166 @@
+# 第3课：连续批处理与调度器
+
+> 上一课：[`02_paged_attention_and_kv_cache.md`](02_paged_attention_and_kv_cache.md) · 下一课：[`04_installation_and_openai_api.md`](04_installation_and_openai_api.md)
+
+---
+
+## 1. 三种批处理模式
+
+### 静态批处理（Static Batching）
+
+```
+时刻 T0: [Req A, B, C, D] 一起开始
+时刻 T1: A 完成 → 仍等 B,C,D
+时刻 T2: C 完成 → 仍等 B,D
+时刻 T3: B,D 完成 → 整批结束，返回全部结果
+
+问题：A、C 完成后 GPU 空等 → 利用率低
+```
+
+### 动态批处理（Dynamic Batching）
+
+在固定时间窗口内凑批，仍是「整批一起结束」，改善有限。
+
+### 连续批处理（Continuous Batching / Iteration-level Scheduling）
+
+```
+每个 decode 步（iteration）后：
+  1. 移除已完成的序列
+  2. 从 waiting 队列插入新请求
+  3. 立即开始下一步 forward
+
+Req A 完成 → 下一步 slot 给 Req E
+→ GPU 几乎始终满载
+```
+
+**vLLM 默认使用连续批处理**，这是高吞吐的核心之一。
+
+---
+
+## 2. vLLM 调度器三队列
+
+```
+                    ┌─────────────┐
+  新请求 ──────────→│   WAITING   │ 尚未开始 prefill
+                    └──────┬──────┘
+                           │ 有空闲 block + token budget
+                           ▼
+                    ┌─────────────┐
+                    │   RUNNING   │ 正在 prefill 或 decode
+                    └──────┬──────┘
+                           │ GPU 显存不足
+                           ▼
+                    ┌─────────────┐
+                    │   SWAPPED   │ KV block 换出到 CPU
+                    └─────────────┘
+```
+
+| 队列 | 说明 |
+|------|------|
+| WAITING | 排队等待，受 `max-num-seqs` 限制 |
+| RUNNING | 活跃推理，每 iteration 调度 |
+| SWAPPED | 显存压力时将低优先级序列 KV 换出 CPU |
+
+---
+
+## 3. 关键调度参数
+
+| 参数 | 含义 | 调优方向 |
+|------|------|---------|
+| `max-num-seqs` | 最大并发序列数 | ↑ 提高吞吐，↑ OOM 风险 |
+| `max-num-batched-tokens` | 单步最大 token 总数 | 平衡 prefill 与 decode |
+| `max-model-len` | 单序列最大长度 | ↓ 可换更多并发 |
+| `gpu-memory-utilization` | 显存使用上限 | 0.85–0.95 |
+
+### 甜点寻找方法
+
+```
+1. 固定模型，从 max-num-seqs=32 开始
+2. 并发压测（如 50 QPS），观察：
+   - 吞吐 (tokens/s)
+   - P95 延迟
+   - OOM 是否发生
+3. 逐步提高 max-num-seqs 直到 OOM 或延迟超标
+4. 回退 10–20% 作为生产值
+```
+
+---
+
+## 4. Chunked Prefill
+
+**问题：** 长 prompt 的 prefill 会阻塞整个 batch 的 decode。
+
+```
+无 Chunked Prefill:
+  长请求 prefill 2000 tokens → 其他 decode 请求全部等待
+
+有 Chunked Prefill:
+  长 prefill 拆成 512-token 块
+  每块之间插入 decode 步 → 短请求不被饿死
+```
+
+vLLM V1 默认启用 Chunked Prefill，显著改善**混合负载**（长短请求并存）下的 P99 延迟。
+
+---
+
+## 5. Prefill vs Decode 调度策略
+
+```
+高并发 + 长 prompt 场景：
+  Prefill 占 GPU 算力 → TTFT 上升
+  Decode 占显存带宽 → TPOT 稳定
+
+优化手段：
+  1. Chunked Prefill（同节点）
+  2. Disaggregated Prefill/Decode（分离节点，第 7 课）
+  3. 限制 max-model-len / 输入截断
+  4. Prefix Caching（重复 prefill 复用）
+```
+
+---
+
+## 6. 代码视角：批量离线推理
+
+```python
+from vllm import LLM, SamplingParams
+
+llm = LLM(model="Qwen/Qwen2.5-7B-Instruct", max_model_len=4096)
+params = SamplingParams(temperature=0.7, max_tokens=256)
+
+# vLLM 自动连续批处理这 1000 条 prompt
+prompts = [f"问题 {i}: 什么是机器学习？" for i in range(1000)]
+outputs = llm.generate(prompts, params)
+
+for out in outputs[:3]:
+    print(out.outputs[0].text[:100])
+```
+
+内部流程：
+1. 1000 条 prompt 进入 waiting 队列
+2. 调度器按显存填满 running batch
+3. 完成的立刻补新 prompt
+4. 全部完成后返回（顺序与输入一致）
+
+---
+
+## 7. 动手练习
+
+1. 运行 `practice/benchmark_simulator.py`，对比 static vs continuous 吞吐
+2. 启动 vLLM，用 `max-num-seqs=8` 和 `64` 分别压测，记录 tokens/s 与 P95
+3. 构造「1 个 8000 token prompt + 20 个短 prompt」混合负载，观察 TTFT 差异
+
+---
+
+## 8. 自检清单
+
+- [ ] 能对比静态批处理与连续批处理的区别
+- [ ] 知道 waiting / running / swapped 三队列的作用
+- [ ] 能解释 max-num-seqs 与 max-num-batched-tokens 的含义
+- [ ] 理解 Chunked Prefill 解决什么问题
+- [ ] 知道如何用压测找调度参数甜点
+
+---
+
+## 下一课
+
+[`04_installation_and_openai_api.md`](04_installation_and_openai_api.md) — 安装 vLLM 并启动 OpenAI 兼容服务

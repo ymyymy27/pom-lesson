@@ -1,0 +1,98 @@
+# 第3课：组织模型：用户、租户、部门与角色建模
+
+## 1. 一句话解释
+
+组织模型是权限系统的"元数据底座"：把"谁属于哪个组织、坐在什么岗位、拥有什么角色"建模清楚，后续的权限判断和租户隔离才有依据。
+
+## 2. 类比
+
+公司通讯录：
+
+```
+租户 tenant     = 一家公司
+部门 department = 组织树节点（技术部 → 后端组）
+岗位 position   = 职位名称（后端工程师）
+角色 role       = 系统内的权限集合（project_admin）
+用户 user       = 员工本人（可在多家公司任职）
+成员 membership = 员工在某家公司的身份
+```
+
+## 3. 核心概念与区别
+
+| 概念 | 回答的问题 | 示例 |
+|------|-----------|------|
+| 用户 user | 全局身份 | zhangsan@example.com |
+| 租户 tenant | 一个独立客户/组织 | Acme 科技有限公司 |
+| 成员 membership | 用户在某租户里的身份 | 张三是 Acme 的成员 |
+| 部门 department | 组织树节点 | 技术部/后端组 |
+| 岗位 position | 组织内的职位 | 后端工程师 |
+| 角色 role | 权限集合 | project_admin |
+| 权限点 permission | 最小操作单元 | project:delete |
+
+三个关键判断：
+
+1. **用户全局唯一，成员按租户存在**：`(user_id, tenant_id)` 唯一，支持同一用户加入多个租户
+2. **岗位 ≠ 角色**：岗位描述职责，角色绑定权限；一个岗位可映射多个角色，但岗位本身不直接放权限
+3. **部门服务数据权限**：部门树用于计算"本部门及下属"范围（第4课），不直接绑功能权限
+
+## 4. 典型表结构（PostgreSQL）
+
+```sql
+CREATE TABLE tenants (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+);
+
+CREATE TABLE users (
+  id BIGSERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL
+);
+
+CREATE TABLE departments (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id BIGINT NOT NULL REFERENCES tenants(id),
+  parent_id BIGINT REFERENCES departments(id),
+  path TEXT NOT NULL,          -- 例如 /1/3/7，用于子树查询
+  name TEXT NOT NULL
+);
+
+CREATE TABLE memberships (
+  user_id BIGINT NOT NULL REFERENCES users(id),
+  tenant_id BIGINT NOT NULL REFERENCES tenants(id),
+  department_id BIGINT REFERENCES departments(id),
+  position_id BIGINT,
+  PRIMARY KEY (user_id, tenant_id)
+);
+
+CREATE TABLE roles (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id BIGINT NOT NULL REFERENCES tenants(id),  -- 租户内角色
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  UNIQUE (tenant_id, code)
+);
+```
+
+## 5. 常见坑
+
+- 用户表直接存 `tenant_id` → 同一用户无法加入多个租户（SaaS 大忌）
+- 角色全局共享 → 客户要自定义角色时改不动
+- 部门树只存 `parent_id` → "本部门及下属"查询要递归，性能差；建议加 `path` 或闭包表
+- 删除租户成员时误删全局用户 → 成员和用户必须分开
+- 组织树跨租户引用 → 所有外键都要带租户边界
+
+## 6. 动手练习
+
+画出你的组织模型 ER 图，并回答三个问题：
+
+1. 同一用户能否加入两个租户？你的表结构如何支持？
+2. 角色应该全局还是租户内？（推荐租户内，支持客户自定义）
+3. "本部门及所有子部门"的查询用什么方案？（path 列 / 闭包表 / 递归 CTE）
+
+## 7. 自检清单
+
+- [ ] 能说清用户、成员、租户三者的关系
+- [ ] 知道为什么角色建议按租户隔离
+- [ ] 能为组织树选择合适的子树查询方案

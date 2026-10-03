@@ -1,0 +1,947 @@
+# PowerShell 语法结构课：从结构理解语言
+
+> 本课不教命令，教的是 PowerShell 这门语言的"语法规则"。学完之后你能看懂任何 PowerShell 代码的结构。
+
+---
+
+## 序章：PowerShell 的本质
+
+### 什么是 PowerShell？
+
+PowerShell 是一种**面向对象的脚本语言**。
+
+```
+传统 Shell（bash/cmd）：
+  输入的是"文本"，输出的是"文本"
+  grep "hello" file.txt  →  处理文本行
+
+PowerShell：
+  输入的是"对象"，输出的是"对象"
+  Get-Process  →  输出进程对象（包含名称、ID、内存等属性）
+```
+
+### 两种输入，两种理解
+
+```
+PowerShell 代码 = 符号 + 关键字 + 数据 + 组合规则
+              ↓
+    理解语法 = 知道每个符号是什么 + 知道怎么组合
+```
+
+---
+
+## 第一章：数据的类型（Type）
+
+### 1.1 一切皆对象
+
+PowerShell 中，所有数据都是**对象**。对象 = 属性（数据）+ 方法（操作）。
+
+```powershell
+# 数字对象
+(42).GetType()           # System.Int32
+(3.14).GetType()         # System.Double
+
+# 字符串对象
+"hello".GetType()         # System.String
+
+# 日期对象
+(Get-Date).GetType()     # System.DateTime
+```
+
+### 1.2 标量类型（Scalar）：一个值
+
+| 类型名 | PowerShell 类型 | 示例 | 说明 |
+|--------|----------------|------|------|
+| 整数 | `[int]` | `42`, `-5`, `0` | 32位整数 |
+| 长整数 | `[long]` | `9223372036854775807` | 64位整数 |
+| 浮点数 | `[double]` | `3.14`, `-0.5` | 双精度浮点 |
+| 字符串 | `[string]` | `"hello"`, `'world'` | 文本 |
+| 布尔值 | `[bool]` | `$true`, `$false` | 真/假 |
+| 空值 | — | `$null` | 空对象 |
+
+```powershell
+# 查看任意值的类型
+$value.GetType().Name
+
+# 强制指定类型
+[int]"42"          # 字符串转整数
+[string]42         # 整数转字符串
+[bool]1            # 非零转 true
+[bool]0            # 零转 false
+```
+
+### 1.3 集合类型（Collection）：多个值
+
+| 类型名 | 示例 | 说明 |
+|--------|------|------|
+| 数组 | `1, 2, 3` | 有序、可重复 |
+| 哈希表 | `@{a=1; b=2}` | 键值对、无序 |
+| 列表 | `[System.Collections.ArrayList]` | 动态数组 |
+
+```powershell
+# 数组：逗号分隔
+$arr = 1, 2, 3
+$arr = @(1, 2, 3)          # 显式声明
+$arr = 1..5                 # 范围：1,2,3,4,5
+
+# 哈希表：@{} 包裹，键值对用分号或换行分隔
+$dict = @{name="张三"; age=25}
+$dict = @{
+    name = "李四"
+    age = 30
+}
+
+# 访问
+$arr[0]                     # 第一个元素
+$arr[-1]                    # 最后一个元素
+$dict["name"]                # 通过键访问
+$dict.name                   # 点号访问
+```
+
+### 1.4 类型判断与转换
+
+```powershell
+# 判断类型
+"hello" -is [string]      # True
+"hello" -is [int]           # False
+
+# 转换类型
+[int]"42"                   # "42" → 42
+[double]"3.14"             # "3.14" → 3.14
+[string]42                  # 42 → "42"
+```
+
+---
+
+## 第二章：符号系统（Symbol）
+
+### 2.1 符号总览
+
+```
+PowerShell 符号分为 7 大类：
+┌─────────────────────────────────────────────────────┐
+│ 1. 赋值符号      =                              │
+│ 2. 算术符号      + - * / %                     │
+│ 3. 比较符号      -eq -ne -gt -lt ...           │
+│ 4. 逻辑符号      -and -or -not  ! && ||        │
+│ 5. 管道符号      |                              │
+│ 6. 作用域符号    $ : :: .                      │
+│ 7. 语法符号      { } ( ) [ ] " ' #             │
+└─────────────────────────────────────────────────────┘
+```
+
+### 2.2 赋值符号
+
+```powershell
+# = 赋值
+$name = "张三"              # 将 "张三" 存入 $name
+
+# += 追加
+$arr = 1, 2, 3
+$arr += 4                   # $arr = 1, 2, 3, 4
+
+# -= 减少
+$i = 10
+$i -= 3                    # $i = 7
+
+# 其他复合赋值
+$j = 5
+$j *= 2                    # $j = 10
+$j /= 2                    # $j = 5
+$j %= 3                    # $j = 2
+```
+
+### 2.3 算术符号
+
+```powershell
+# 基本运算
+5 + 3                      # 8    加法
+5 - 3                      # 2    减法
+5 * 3                      # 15   乘法
+5 / 3                      # 1.66 除法（浮点）
+5 % 3                      # 2    取余
+
+# 字符串运算
+"Hello " + "World"        # "Hello World" 拼接
+"-" * 20                   # "--------------------" 重复
+"abc" + 123                # "abc123" 自动转字符串
+
+# 数组运算
+1, 2 + 3, 4               # 1, 2, 3, 4  数组拼接
+```
+
+### 2.4 比较符号
+
+PowerShell 的比较符号都以 `-` 开头，这是区分"比较"和"赋值"的关键。
+
+```powershell
+# 相等性
+5 -eq 5                    # True    等于
+5 -ne 3                    # True    不等于
+"abc" -eq "abc"           # True
+
+# 大小关系
+5 -gt 3                    # True    大于
+5 -lt 10                   # True    小于
+5 -ge 5                    # True    大于等于
+5 -le 5                    # True    小于等于
+
+# 字符串匹配
+"hello" -like "*ll*"      # True    通配符匹配
+"hello" -match "^h"       # True    正则匹配
+"hello" -contains "ell"   # True    包含
+"hello" -in "hello","hi"  # True    在集合中
+
+# 类型检查
+"123" -is [int]           # False
+"123" -is [string]        # True
+```
+
+**对比其他语言：**
+
+| 含义 | PowerShell | Python | JavaScript |
+|------|-----------|--------|------------|
+| 等于 | `-eq` | `==` | `===` |
+| 不等于 | `-ne` | `!=` | `!==` |
+| 大于 | `-gt` | `>` | `>` |
+
+### 2.5 逻辑符号
+
+```powershell
+# 与
+($true -and $true)        # True
+($true -and $false)        # False
+
+# 或
+($true -or $false)         # True
+($false -or $false)        # False
+
+# 非
+-not $true                  # False
+!$true                      # False
+
+# 组合
+(5 -gt 3) -and (10 -lt 20)  # True and True = True
+(5 -gt 3) -and (10 -gt 20)  # True and False = False
+
+# 短路运算
+($false) -and (1/0)        # 不会执行 1/0（短路）
+```
+
+### 2.6 管道符号
+
+管道 `|` 是 PowerShell 最核心的符号。
+
+```powershell
+# 原理：把左边命令的输出，作为右边命令的输入
+# 命令A | 命令B
+#     ↓        ↓
+#   输出  →  输入
+
+# 示例分解
+Get-Process | Where-Object { $_.CPU -gt 10 }
+     │                    │
+     │   输出进程对象      │
+     │   ──────────────→ │
+     │                    │ 接收进程对象，筛选
+     │                    ↓
+     │                    输出筛选后的进程对象
+```
+
+### 2.7 作用域符号
+
+```powershell
+# $ 变量符号
+$name = "张三"
+${name with spaces} = "李四"    # 特殊变量名
+
+# :: 静态成员访问
+[Math]::Pow(2, 3)              # 2³ = 8
+[Math]::Max(1, 2)             # 2
+[Math]::Round(3.5)            # 4
+[string]::Empty                # ""
+
+# . 属性/方法访问
+$str = "hello"
+$str.Length                    # 5（属性）
+$str.ToUpper()                 # "HELLO"（方法）
+
+# :: vs . 的区别
+#   :: 访问的是类的静态成员（不需要实例化）
+#   .  访问的是对象的实例成员（需要先有对象）
+```
+
+### 2.8 语法符号
+
+```powershell
+# { } 脚本块（ScriptBlock）
+{ $_.CPU -gt 10 }            # 一段可执行的代码
+{ $name = "test" }          # 包含语句的代码块
+
+# ( ) 表达式分组 / 函数调用
+(1 + 2) * 3                  # 改变优先级
+$result = (Get-Process)[0]    # 函数返回值
+Write-Output ("Hello" + "World")
+
+# [ ] 类型声明 / 索引
+[int] $num = 42               # 类型约束
+$arr = 1, 2, 3
+$arr[0]                       # 数组索引
+
+# " " 双引号：解析字符串
+$name = "张三"
+"Hello $name"                 # "Hello 张三"
+"1 + 1 = $(1 + 1)"           # "1 + 1 = 2"
+
+# ' ' 单引号：原始字符串
+'Hello $name'                 # "Hello $name"（不解析变量）
+'1 + 1 = $(1 + 1)'           # "1 + 1 = $(1 + 1)"
+
+# # 注释
+# 这是单行注释
+<#
+    这是
+    多行注释
+#>
+
+# .. 范围操作符
+1..5                          # 1, 2, 3, 4, 5
+'a'..'e'                      # a, b, c, d, e
+
+# .. 成员访问（PowerShell 7+）
+$obj?.Property                 # 安全导航（null 不报错）
+$obj?.Method()?.Value         # 链式安全导航
+```
+
+---
+
+## 第三章：语句结构（Statement）
+
+### 3.1 表达式 vs 语句
+
+```
+表达式（Expression）：有返回值
+语句（Statement）：执行动作，无返回值或返回值被忽略
+```
+
+```powershell
+# 表达式
+1 + 2                         # 有值：3
+"hello".ToUpper()             # 有值："HELLO"
+$name = "张三"                 # 有值："张三"
+
+# 语句（通常以换行或分号结束）
+Write-Output "hello"           # 执行输出
+Get-Process                    # 执行查询，结果打印出来
+```
+
+### 3.2 变量赋值语句
+
+```powershell
+# 基本赋值
+$变量名 = 值
+
+# 类型约束赋值
+[int]$num = 42
+[string]$text = "hello"
+[bool]$flag = $true
+[array]$arr = 1, 2, 3
+
+# 多重赋值（解构）
+$a, $b, $c = 1, 2, 3       # $a=1, $b=2, $c=3
+$a, $b = 1, 2, 3            # $a=1, $b=2,3（多余的值给最后一个）
+```
+
+### 3.3 条件语句
+
+```powershell
+# if 语法
+if (条件表达式) {
+    代码块
+}
+
+# if-else
+if (条件) {
+    # 条件为真时执行
+} else {
+    # 条件为假时执行
+}
+
+# if-elseif-else
+if (条件1) {
+    # 条件1为真
+} elseif (条件2) {
+    # 条件2为真
+} else {
+    # 都不满足
+}
+
+# 示例
+$score = 85
+if ($score -ge 90) {
+    "优秀"
+} elseif ($score -ge 60) {
+    "及格"
+} else {
+    "不及格"
+}
+```
+
+### 3.4 switch 语句
+
+```powershell
+# 基本语法
+switch (表达式) {
+    "值1" { 代码; break }
+    "值2" { 代码; break }
+    default { 代码 }
+}
+
+# 示例
+$grade = "B"
+switch ($grade) {
+    "A" { "优秀"; break }
+    "B" { "良好"; break }
+    "C" { "及格"; break }
+    default { "未知" }
+}
+
+# 带条件的 switch
+$num = 15
+switch ($num) {
+    { $_ -gt 10 -and $_ -lt 20 } { "10-20之间"; break }
+    default { "其他" }
+}
+```
+
+### 3.5 循环语句
+
+```powershell
+# for 循环
+for ($i = 0; $i -lt 5; $i++) {
+    $i
+}
+
+# foreach 循环（遍历集合）
+$arr = 1, 2, 3
+foreach ($item in $arr) {
+    $item * 2
+}
+
+# while 循环
+$i = 0
+while ($i -lt 5) {
+    $i
+    $i++
+}
+
+# do-while 循环（至少执行一次）
+$i = 0
+do {
+    $i
+    $i++
+} while ($i -lt 5)
+```
+
+### 3.6 管道语句
+
+```powershell
+# 单管道
+命令A | 命令B
+
+# 多管道
+命令A | 命令B | 命令C | 命令D
+
+# 管道内的脚本块
+1..5 | ForEach-Object { $_ * 2 }
+1..10 | Where-Object { $_ % 2 -eq 0 }
+```
+
+---
+
+## 第四章：命令结构（Command）
+
+### 4.1 命令的组成
+
+```
+Verb-Noun [-Parameter1 Value1] [-Parameter2 Value2] [-Switch]
+
+  │      │       │         │         │         │
+  │      │       │         │         └─ 开关参数（无值）
+  │      │       │         └─ 参数值2
+  │      │       └─ 参数名2
+  │      └─ 参数分隔符（-）
+  └─ 命令名（Verb + Noun）
+```
+
+### 4.2 参数的语法位置
+
+```powershell
+# 位置参数：按顺序省略参数名
+Get-ChildItem C:\Windows *.txt
+#         路径         过滤器
+
+# 命名参数：必须写参数名
+Get-ChildItem -Path C:\Windows -Filter *.txt
+
+# 混合：前两个位置，后两个命名
+Get-ChildItem C:\Windows *.txt -Recurse -Force
+```
+
+### 4.3 参数的类型
+
+```powershell
+# 位置参数：值按顺序匹配
+Get-ChildItem "C:\Windows"           # 第一个位置：Path
+
+# 命名参数：-Name Value
+Get-ChildItem -Path "C:\Windows"
+
+# 开关参数：只有有无，没有值
+Get-ChildItem -Recurse              # 有此参数
+Get-ChildItem                        # 无此参数
+
+# 数组参数：多个值
+Get-Process -Name "python", "code"
+
+# 管道参数：可以从管道接收输入
+Get-Process | Stop-Process           # Stop-Process 可以接收管道输入
+```
+
+### 4.4 常用系统参数
+
+```powershell
+# -WhatIf / -Confirm / -Verbose / -Debug
+# 这四个参数几乎所有命令都支持
+
+Remove-Item test.txt -WhatIf        # 模拟删除，不实际执行
+Remove-Item test.txt -Confirm       # 删除前确认
+Write-Output "hi" -Verbose         # 显示详细信息
+Write-Output "hi" -Debug            # 显示调试信息
+
+# -ErrorAction / -WarningAction
+Get-Content none.txt -ErrorAction SilentlyContinue
+
+# -WhatIf / -Confirm 是"安全参数"
+# 它们改变了命令的行为，但不改变数据
+```
+
+---
+
+## 第五章：脚本块与函数（ScriptBlock & Function）
+
+### 5.1 脚本块的本质
+
+**脚本块 = 一段可执行的代码**
+
+```powershell
+# 脚本块的声明
+{ $_ * 2 }                         # 一个脚本块
+{ param($x) $x + 1 }              # 带参数的脚本块
+
+# 脚本块是值，可以赋值给变量
+$double = { $_ * 2 }
+& $double 5                        # 调用：10
+. $double 5                       # 点调用：10
+
+# 脚本块可以接收参数
+$add = { param($a, $b) $a + $b }
+& $add 3 5                        # 8
+```
+
+### 5.2 函数的声明
+
+```powershell
+# 基本语法
+function 函数名 {
+    # 函数体
+}
+
+# 带参数的函数
+function 函数名 {
+    param(
+        [类型1]$参数1,
+        [类型2]$参数2 = 默认值
+    )
+    # 函数体
+}
+
+# 示例
+function Add {
+    param([int]$A, [int]$B)
+    return $A + $B
+}
+```
+
+### 5.3 管道函数
+
+```powershell
+# 能接收管道输入的函数
+function Get-Square {
+    param(
+        [Parameter(ValueFromPipeline=$true)]   # 标记管道参数
+        [int]$Number
+    )
+    process {                                  # process 块处理每个输入
+        $Number * $Number
+    }
+}
+
+# 使用
+5 | Get-Square                    # 25
+1..5 | Get-Square                 # 1, 4, 9, 16, 25
+```
+
+### 5.4 CmdletBinding 函数
+
+```powershell
+# 支持高级功能（-WhatIf, -Verbose 等）的函数
+function 函数名 {
+    [CmdletBinding()]            # 启用高级参数
+    param(...)
+    )
+    # 函数体
+}
+```
+
+---
+
+## 第六章：管道组合（Pipeline Composition）
+
+### 6.1 管道的本质
+
+```
+管道 = 数据流 + 转换器
+
+  数据 ──→ 转换1 ──→ 转换2 ──→ 转换3 ──→ 输出
+          │          │          │
+       命令A       命令B       命令C
+```
+
+### 6.2 管道中的特殊变量
+
+```powershell
+# $_ 或 $PSItem：当前管道对象
+1..5 | ForEach-Object { $_ * 2 }      # $_ 是当前数字
+Get-Process | Where-Object { $_.CPU -gt 0 }  # $_ 是当前进程
+```
+
+### 6.3 管道命令的分类
+
+```powershell
+# 生成类：产生数据
+Get-Process                       # 获取进程
+1..10                            # 生成数字
+"a", "b", "c"                   # 手动生成
+
+# 处理类：转换数据
+Where-Object                     # 筛选
+ForEach-Object                   # 遍历处理
+Sort-Object                      # 排序
+Select-Object                    # 选择属性
+Group-Object                     # 分组
+
+# 终结类：消费数据
+Measure-Object                   # 统计
+Out-File                        # 输出到文件
+Format-Table                     # 格式化显示
+```
+
+### 6.4 管道链的解析
+
+```powershell
+Get-Process | Where-Object { $_.CPU -gt 0 } | Sort-Object CPU -Descending | Select-Object -First 5 Name, CPU
+
+# 解析：
+#   1. Get-Process
+#      └─ 生成：进程对象流
+#             ↓
+#   2. Where-Object { $_.CPU -gt 0 }
+#      └─ 过滤：只保留 CPU > 0 的进程
+#             ↓
+#   3. Sort-Object CPU -Descending
+#      └─ 排序：按 CPU 降序排列
+#             ↓
+#   4. Select-Object -First 5 Name, CPU
+#      └─ 选择：取前5个，只显示 Name 和 CPU
+#             ↓
+#   输出到控制台（Format-Table 自动格式化）
+```
+
+---
+
+## 第七章：对象结构（Object）
+
+### 7.1 对象的组成
+
+```
+对象 = 类型 + 属性 + 方法
+
+┌─────────────────────────────────────────┐
+│  对象                                    │
+│  ├─ TypeName: System.Diagnostics.Process │
+│  ├─ 属性（数据）                          │
+│  │    ├─ Name: "notepad"               │
+│  │    ├─ Id: 1234                       │
+│  │    └─ CPU: 0.5                       │
+│  └─ 方法（操作）                          │
+│       ├─ Kill()                         │
+│       ├─ Start()                         │
+│       └─ WaitForExit()                   │
+└─────────────────────────────────────────┘
+```
+
+### 7.2 访问成员
+
+```powershell
+# . 访问实例成员
+$proc = Get-Process -Name "notepad" | Select-Object -First 1
+$proc.Name                     # 访问属性
+$proc.Kill()                   # 调用方法
+
+# :: 访问静态成员
+[Math]::Max(1, 2)              # 2
+[Math]::Pow(2, 3)              # 8
+[DateTime]::Now                 # 当前时间
+
+# ? 安全导航（PowerShell 7+）
+$obj = $null
+$obj?.Name                     # 不报错，返回 $null
+$obj?.Method()?.Value          # 链式安全导航
+```
+
+### 7.3 计算属性
+
+```powershell
+# 语法：@{ Name="名字"; Expression={ 表达式 } }
+Get-Process | Select-Object Name,
+    @{Name="MemoryMB"; Expression={ $_.WorkingSet / 1MB }}
+    # └─ 属性名        └─ 计算表达式，$_ 是当前对象
+```
+
+### 7.4 自定义对象
+
+```powershell
+# PSCustomObject：自定义对象
+[PSCustomObject]@{
+    Name = "张三"
+    Age = 25
+    City = "北京"
+}
+
+# 成员追加
+$obj = [PSCustomObject]@{ Name = "张三" }
+$obj | Add-Member -NotePropertyName "Age" -NotePropertyValue 25
+```
+
+---
+
+## 第八章：作用域（Scope）
+
+### 8.1 作用域层级
+
+```
+PowerShell 作用域层级：
+
+┌─────────────────────────────────────────┐
+│  Global（全局）                          │
+│  ├─ PowerShell 启动时创建                │
+│  └─ 所有子作用域可见                     │
+│     ┌─────────────────────────────────┐│
+│     │  Script（脚本）                   ││
+│     │  ├─ 当前脚本文件内                 ││
+│     │  └─ 子脚本/函数不可见（除非导出）   ││
+│     │     ┌─────────────────────────┐││
+│     │     │  Local（本地）            │││
+│     │     │  ├─ 当前作用域           │││
+│     │     │  └─ 可见父作用域变量     │││
+│     │     └─────────────────────────┘││
+│     └─────────────────────────────────┘│
+└─────────────────────────────────────────┘
+```
+
+### 8.2 作用域修饰符
+
+```powershell
+# $script:var 脚本作用域
+$script:counter = 0
+
+# $global:var 全局作用域
+$global:config = "value"
+
+# $local:var 本地作用域（默认，可省略）
+
+# $private:var 私有变量
+```
+
+### 8.3 作用域示例
+
+```powershell
+$var = "全局"
+
+function Test-Scope {
+    $var = "局部"               # 创建新的局部变量
+    Write-Output $var           # "局部"
+
+    Write-Output $script:var    # "全局"（脚本作用域）
+    Write-Output $global:var    # "全局"（全局作用域）
+}
+
+Test-Scope
+Write-Output $var                # "全局"（函数外的变量不变）
+```
+
+---
+
+## 第九章：特殊字符与转义
+
+### 9.1 换行与续行
+
+```powershell
+# 换行符
+# PowerShell 中换行 = 语句结束（除非在字符串或括号内）
+
+# 续行符 `
+Write-Output `
+    "Hello" `
+    "World"
+
+# 多行字符串 @" "@
+$text = @"
+这是
+多行
+字符串
+"@
+```
+
+### 9.2 特殊转义
+
+```powershell
+# `n 换行
+"Hello`nWorld"              # Hello + 换行 + World
+
+# `t 制表符
+"Hello`tWorld"             # Hello + Tab + World
+
+# `r 回车
+# `b 退格
+
+# 单引号内转义（两个单引号）
+'It''s a test'            # It's a test
+```
+
+---
+
+## 第十章：语法速查图
+
+### 10.1 完整语法结构图
+
+```
+PowerShell 表达式 = 词法元素的有序组合
+
+词法元素：
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│  变量    │ │  字符串   │ │  数字     │ │  符号    │ │  关键字  │
+│ $name   │ │ "text"   │ │  42      │ │  + - * / │ │ if/for   │
+└────┬─────┘└────┬─────┘└────┬─────┘└────┬─────┘└────┬─────┘
+     │            │            │            │            │
+     └────────────┴─────┬──────┴────────────┴────────────┘
+                        ↓
+              ┌─────────┴──────────┐
+              │   表达式/语句       │
+              └─────────┬──────────┘
+                        ↓
+              ┌─────────┴──────────┐
+              │   命令/管道/函数    │
+              └─────────────────────┘
+
+语句类型：
+├── 赋值语句      $x = 1
+├── 表达式语句    Get-Process
+├── 条件语句      if/switch
+├── 循环语句      for/foreach/while
+├── 管道语句      A | B | C
+└── 函数语句      function X { }
+```
+
+### 10.2 符号优先级
+
+```
+优先级（从高到低）：
+┌────────────────────────────────────────┐
+│ 1. ()  括号                             │
+│ 2. . :: 属性/方法访问                   │
+│ 3. -not !  逻辑非                       │
+│ 4. * / %  算术                         │
+│ 5. + -    算术                         │
+│ 6. -is -as -eq -ne...  比较            │
+│ 7. -and -or  逻辑                      │
+│ 8. = += -= ...  赋值                   │
+│ 9. |    管道                           │
+└────────────────────────────────────────┘
+```
+
+### 10.3 括号的作用
+
+```powershell
+# 1. 函数调用
+Write-Output ("hello")
+
+# 2. 表达式分组
+(1 + 2) * 3                     # 先算 1+2，再乘 3
+
+# 3. 类型转换
+([int]"42")
+
+# 4. 命令分组
+(Get-Process)[0]
+
+# 5. 数组/哈希表（显式）
+@(1, 2, 3)
+@{ a = 1; b = 2 }
+
+# 6. 参数分组（传给命令的参数）
+Command -Param (Get-Date)
+```
+
+---
+
+## 附录：常见错误对照
+
+| 错误类型 | 错误写法 | 正确写法 |
+|---------|---------|---------|
+| 变量未定义 | `$name` | `Write-Output $name` |
+| 类型不匹配 | `"5" + 5` | `[int]"5" + 5` |
+| 引号嵌套 | `"say "hi""` | `"say 'hi'"` 或 `` "say `"hi`"" `` |
+| 管道变量误用 | `$item` 在管道外 | `$_` 在管道内 |
+| 作用域混淆 | 函数内改不了全局 | `$global:name` |
+| 括号不匹配 | `(1 + 2` | `(1 + 2)` |
+
+---
+
+## 总结
+
+```
+PowerShell 语法 = 数据 + 符号 + 组合规则
+
+数据结构：
+  标量：数字、字符串、布尔
+  集合：数组、哈希表
+
+符号类型：
+  赋值：=
+  算术：+ - * / %
+  比较：-eq -ne -gt -lt
+  逻辑：-and -or -not
+  管道：|
+  作用域：$ ::
+
+组合方式：
+  命令：Verb-Noun -Param Value
+  管道：A | B | C
+  函数：function Name { }
+  条件：if (cond) { }
+  循环：foreach ($i in $arr) { }
+
+理解了这个结构，你就能看懂任何 PowerShell 代码了。
+```

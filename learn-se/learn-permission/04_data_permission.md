@@ -1,0 +1,72 @@
+# 第4课：数据权限：谁能看到哪些数据
+
+## 1. 一句话解释
+
+功能权限管"能不能点这个按钮"，数据权限管"点进去之后能看到哪些行、哪些字段"。
+
+## 2. 类比
+
+同样是财务系统：
+
+```
+出纳 → 看本公司全部报销单
+普通员工 → 只看自己的报销单
+按钮一样，数据范围不同
+```
+
+## 3. 核心知识
+
+### 3.1 数据范围模型
+
+| 范围 | 含义 | SQL 条件示例 |
+|------|------|-------------|
+| 仅本人 | 只看自己的数据 | `owner_id = :user_id` |
+| 本部门 | 看所在部门的数据 | `department_id = :dept_id` |
+| 本部门及下属 | 看部门树内数据 | `department_id IN (子树所有节点)` |
+| 全部 | 看租户内全部数据 | `tenant_id = :tenant_id` |
+| 自定义 | 指定成员/标签 | `member_id IN (:ids)` |
+
+### 3.2 三种实现方案
+
+1. **查询层注入（推荐起步）**：所有列表/详情/导出查询必须经过统一的数据范围解析器，把范围拼进 WHERE
+2. **策略 + Repository**：权限服务返回 scope 对象，数据访问层统一应用，业务代码不感知
+3. **数据库 RLS（Row-Level Security）**：数据库层面强制行过滤，防绕过最彻底，但调试和迁移成本高
+
+查询层注入示例：
+
+```python
+def apply_data_scope(query, user, action):
+    scope = permission_service.resolve_data_scope(user, action)
+    if scope.kind == "self":
+        return query.where(Task.owner_id == user.id)
+    if scope.kind == "dept_and_children":
+        return query.where(Task.department_id.in_(scope.dept_ids))
+    if scope.kind == "all":
+        return query.where(Task.tenant_id == user.tenant_id)
+    raise Forbidden(f"没有 {action} 的数据范围")
+```
+
+### 3.3 字段权限与脱敏
+
+- 某些角色看不到 `salary`、`phone` 等敏感列
+- 实现：序列化层按权限裁剪字段 + 脱敏（`138****1234`）
+- 前端隐藏不等于权限，**后端必须裁剪**
+
+### 3.4 防绕过要点
+
+- 数据权限校验必须在服务层，不能信任前端传的 scope
+- 列表、详情、批量、导出、报表必须走同一个入口
+- 最容易漏的地方：报表导出、聚合统计、定时任务、管理后台
+
+## 4. 动手练习
+
+运行 `practice/data_scope_demo.py`，观察"本部门及下属"如何通过部门树展开，然后修改案例验证：
+
+1. 一个员工在"后端组"，他能看到哪些部门的数据？
+2. 如果把数据权限漏在报表接口，攻击者可能拿到什么？
+
+## 5. 自检清单
+
+- [ ] 能区分功能权限与数据权限
+- [ ] 能设计统一数据权限入口（列表/详情/导出）
+- [ ] 知道 RLS 的优缺点以及为什么不能只依赖 RLS

@@ -1,0 +1,326 @@
+# 第 02 节：URL 路由系统
+
+## 一、路由是什么？
+
+路由（URL Routing）就是把 **URL 地址** 映射到 **视图函数/类** 的过程。
+
+```
+用户访问 /api/tasks/       →  路由匹配  →  调用 task_list 视图
+用户访问 /api/tasks/5/     →  路由匹配  →  调用 task_detail 视图，传入 id=5
+用户访问 /api/users/login/ →  路由匹配  →  调用 login 视图
+```
+
+---
+
+## 二、基础路由配置
+
+### 2.1 根路由（config/urls.py）
+
+```python
+# config/urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),                    # Admin 后台
+    path('api/users/', include('apps.users.urls')),     # 用户相关 URL
+    path('api/projects/', include('apps.projects.urls')),# 项目相关 URL
+    path('api/tasks/', include('apps.tasks.urls')),     # 任务相关 URL
+]
+```
+
+### 2.2 应用路由
+
+```python
+# apps/tasks/urls.py
+from django.urls import path
+from . import views
+
+app_name = 'tasks'  # 命名空间，用于反向解析
+
+urlpatterns = [
+    path('', views.task_list, name='task-list'),           # /api/tasks/
+    path('<int:pk>/', views.task_detail, name='task-detail'), # /api/tasks/5/
+    path('create/', views.task_create, name='task-create'),   # /api/tasks/create/
+]
+```
+
+---
+
+## 三、path() 函数详解
+
+```python
+path(route, view, kwargs=None, name=None)
+```
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `route` | URL 模式字符串 | `'tasks/<int:pk>/'` |
+| `view` | 视图函数或类 | `views.task_detail` |
+| `kwargs` | 传递给视图的额外参数 | `{'extra': 'value'}` |
+| `name` | 路由名称（用于反向解析） | `'task-detail'` |
+
+### 3.1 路径转换器
+
+在 URL 中捕获参数：
+
+```python
+urlpatterns = [
+    # <类型:参数名>
+    path('tasks/<int:pk>/', views.task_detail),          # 整数: /tasks/5/
+    path('users/<str:username>/', views.user_profile),   # 字符串: /users/zhangsan/
+    path('files/<path:file_path>/', views.download),     # 路径: /files/docs/readme.md/
+    path('items/<slug:slug>/', views.item_detail),       # Slug: /items/my-first-post/
+    path('orders/<uuid:order_id>/', views.order_detail), # UUID: /orders/550e8400-.../
+]
+```
+
+| 转换器 | 匹配规则 | 示例 |
+|--------|---------|------|
+| `int` | 正整数 | `42` |
+| `str` | 非空字符串（不含 `/`），默认 | `hello` |
+| `slug` | 字母、数字、连字符、下划线 | `my-first-post` |
+| `uuid` | UUID 格式 | `550e8400-e29b-...` |
+| `path` | 包含 `/` 的路径 | `docs/readme.md` |
+
+### 3.2 视图接收路径参数
+
+```python
+# views.py
+from django.http import JsonResponse
+
+def task_detail(request, pk):
+    """pk 自动从 URL 中提取"""
+    return JsonResponse({"task_id": pk})
+
+def user_profile(request, username):
+    """username 自动从 URL 中提取"""
+    return JsonResponse({"username": username})
+```
+
+---
+
+## 四、include() — 路由分发
+
+`include()` 将一组 URL 路由分发给子应用处理，保持模块化。
+
+```python
+# config/urls.py（根路由）
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    
+    # 方式 1：引用应用的 urls 模块
+    path('api/users/', include('apps.users.urls')),
+    
+    # 方式 2：带命名空间
+    path('api/tasks/', include('apps.tasks.urls', namespace='tasks')),
+    
+    # 方式 3：直接传入 URL 列表
+    path('api/v2/', include([
+        path('health/', views.health_check),
+        path('version/', views.version_info),
+    ])),
+]
+```
+
+**URL 拼接规则：**
+
+```
+根路由 path('api/tasks/', ...)
+  +
+应用路由 path('<int:pk>/', ...)
+  =
+最终 URL: /api/tasks/5/
+```
+
+---
+
+## 五、命名路由与反向解析
+
+### 5.1 为什么需要命名路由？
+
+硬编码 URL 字符串容易出错。如果 URL 改变了，所有引用该 URL 的地方都要改。
+
+```python
+# ❌ 硬编码 URL
+redirect("/api/tasks/5/")
+
+# ✅ 使用命名路由反向解析
+from django.urls import reverse
+redirect(reverse("tasks:task-detail", kwargs={"pk": 5}))
+# 自动生成 "/api/tasks/5/"
+```
+
+### 5.2 reverse() 函数
+
+```python
+from django.urls import reverse
+
+# 基础用法
+url = reverse('tasks:task-list')                          # /api/tasks/
+url = reverse('tasks:task-detail', kwargs={'pk': 5})      # /api/tasks/5/
+url = reverse('tasks:task-detail', args=[5])              # /api/tasks/5/（位置参数写法）
+
+# 在视图中使用
+from django.http import JsonResponse
+
+def create_task(request):
+    # ... 创建任务逻辑 ...
+    task_url = reverse('tasks:task-detail', kwargs={'pk': new_task.id})
+    return JsonResponse({
+        'id': new_task.id,
+        'url': task_url,
+    }, status=201)
+```
+
+### 5.3 命名空间（namespace）
+
+命名空间防止不同应用之间路由名称冲突。
+
+```python
+# config/urls.py
+urlpatterns = [
+    path('api/tasks/', include('apps.tasks.urls', namespace='tasks')),
+    path('api/projects/', include('apps.projects.urls', namespace='projects')),
+]
+
+# 两个应用都可以有 name='detail' 的路由，通过命名空间区分
+reverse('tasks:detail', kwargs={'pk': 1})      # /api/tasks/1/
+reverse('projects:detail', kwargs={'pk': 1})   # /api/projects/1/
+```
+
+> 使用命名空间时，应用的 `urls.py` 中必须定义 `app_name`。
+
+---
+
+## 六、re_path() — 正则路由
+
+当 `path()` 的转换器不够用时，可以使用正则表达式。
+
+```python
+from django.urls import re_path
+
+urlpatterns = [
+    # 匹配 4 位年份
+    re_path(r'^articles/(?P<year>[0-9]{4})/$', views.year_archive),
+    
+    # 匹配日期格式
+    re_path(r'^articles/(?P<year>[0-9]{4})/(?P<month>[0-9]{2})/$', views.month_archive),
+    
+    # 匹配邮箱
+    re_path(r'^users/(?P<email>[\w.+-]+@[\w-]+\.[\w.]+)/$', views.user_by_email),
+]
+```
+
+> 💡 实际开发中 `path()` 足够覆盖 95% 的场景，尽量避免使用 `re_path()`。
+
+---
+
+## 七、URL 设计最佳实践
+
+### 7.1 RESTful URL 风格
+
+```python
+# ✅ 推荐的 RESTful 风格
+urlpatterns = [
+    path('', views.TaskList.as_view()),           # GET 列表 / POST 创建
+    path('<int:pk>/', views.TaskDetail.as_view()), # GET 详情 / PUT 更新 / DELETE 删除
+]
+
+# ❌ 不推荐
+urlpatterns = [
+    path('getTaskList/', ...),
+    path('createTask/', ...),
+    path('deleteTask/<int:pk>/', ...),
+]
+```
+
+### 7.2 URL 设计原则
+
+| 原则 | 说明 | 示例 |
+|------|------|------|
+| 使用名词 | URL 表示资源，不是动作 | `/api/tasks/` 而非 `/api/getTask/` |
+| 使用复数 | 集合用复数名词 | `/api/tasks/` 而非 `/api/task/` |
+| 层级关系 | 用路径表示从属关系 | `/api/projects/1/tasks/` |
+| 版本号 | API 版本放在 URL 中 | `/api/v1/tasks/` |
+| 小写 | URL 统一用小写 | `/api/tasks/` 而非 `/api/Tasks/` |
+
+### 7.3 TaskFlow 项目的 URL 设计
+
+```
+/api/v1/
+├── auth/
+│   ├── register/          POST   注册
+│   ├── login/             POST   登录
+│   └── logout/            POST   登出
+├── users/
+│   ├──                    GET    用户列表
+│   ├── me/                GET    当前用户信息
+│   └── <int:pk>/          GET    用户详情
+├── projects/
+│   ├──                    GET/POST      项目列表/创建
+│   ├── <int:pk>/          GET/PUT/DELETE 项目详情/更新/删除
+│   └── <int:pk>/members/  GET/POST      项目成员
+├── tasks/
+│   ├──                    GET/POST      任务列表/创建
+│   ├── <int:pk>/          GET/PUT/DELETE 任务详情/更新/删除
+│   └── <int:pk>/comments/ GET/POST      任务评论
+└── tags/
+    └──                    GET/POST      标签列表/创建
+```
+
+---
+
+## 八、调试路由
+
+### 8.1 查看所有注册的 URL
+
+```bash
+# Django 自带命令（需要安装 django-extensions 才能用 show_urls）
+python manage.py show_urls
+
+# 或者在代码中
+from django.urls import get_resolver
+resolver = get_resolver()
+for pattern in resolver.url_patterns:
+    print(pattern)
+```
+
+### 8.2 常见路由错误
+
+```python
+# 错误 1：URL 末尾的斜杠
+# Django 默认 APPEND_SLASH = True，会自动重定向
+# /api/tasks  →  301 重定向到 /api/tasks/
+# 建议：URL 模式统一以 / 结尾
+
+# 错误 2：路由顺序
+# Django 按从上到下的顺序匹配，匹配到第一个就停止
+urlpatterns = [
+    path('tasks/<str:slug>/', views.task_by_slug),   # 这个会先匹配
+    path('tasks/create/', views.task_create),          # 永远不会被匹配到！
+]
+# 修复：把更具体的路由放在前面
+urlpatterns = [
+    path('tasks/create/', views.task_create),          # 先匹配具体路径
+    path('tasks/<str:slug>/', views.task_by_slug),     # 再匹配参数路径
+]
+
+# 错误 3：忘记在应用 urls.py 中定义 app_name
+# 使用命名空间时，urls.py 中必须有 app_name = 'xxx'
+```
+
+---
+
+## 九、练习
+
+1. 在 `taskflow-backend` 项目中，为 `users`、`projects`、`tasks` 三个应用分别创建 `urls.py`
+2. 在根路由中用 `include()` 分发到各应用，带命名空间
+3. 在 `tasks/urls.py` 中配置以下路由：
+   - `GET /api/tasks/` → 任务列表
+   - `GET /api/tasks/<int:pk>/` → 任务详情
+   - `GET /api/projects/<int:project_id>/tasks/` → 项目下的任务
+4. 写一个简单的视图返回 JSON，验证路由和路径参数是否正确传递
+5. 使用 `reverse()` 生成 URL，打印结果确认

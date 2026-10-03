@@ -1,0 +1,225 @@
+# 第8课：安全基线、网络排查与常见问题
+
+## 1. 组网的安全底线
+
+把不同网络打通，等于**把信任边界扩展到了每一台设备**。
+安全不是可选项，先记住五条底线：
+
+1. **SSH 只用密钥登录**，关闭密码登录；
+2. **能不开公网就不开公网**，敏感服务只走 VPN/隧道；
+3. **最小暴露**：只开需要的端口，用完即关；
+4. **所有公开访问走 HTTPS + 鉴权**；
+5. **记录日志**，能回答"谁在什么时候连了什么"。
+
+---
+
+## 2. SSH 加固
+
+```ini
+# /etc/ssh/sshd_config
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+AllowTcpForwarding yes        # 需要隧道时保留
+MaxAuthTries 3
+```
+
+修改后重启：
+
+```bash
+sudo systemctl restart sshd
+```
+
+> ⚠️ 关闭密码登录前，务必先确认密钥能登录，否则可能把自己锁在外面。
+
+---
+
+## 3. 防火墙
+
+### 3.1 云服务器：安全组
+
+云厂商的安全组是**第一道门**，只放行必要端口：
+
+```text
+入站规则建议：
+22/tcp      来自办公室/VPN 网段（不要 0.0.0.0/0）
+80,443/tcp  来自 0.0.0.0/0（Web 服务）
+51820/udp   来自 0.0.0.0/0（WireGuard，仅组网节点）
+其他端口    一律拒绝
+```
+
+### 3.2 Linux 本机防火墙（ufw）
+
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80,443/tcp
+sudo ufw allow 51820/udp
+sudo ufw enable
+sudo ufw status
+```
+
+### 3.3 Windows 防火墙
+
+```powershell
+# 查看规则
+Get-NetFirewallRule -Enabled True | Select DisplayName
+
+# 为端口放行（管理员 PowerShell）
+New-NetFirewallRule -DisplayName "Dev 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+```
+
+---
+
+## 4. 密钥与凭据管理
+
+| 凭据 | 存放 | 禁止 |
+|------|------|------|
+| SSH 私钥 | `~/.ssh/`，权限 600 | 提交到 Git、发给别人 |
+| 数据库密码 | 密钥管理服务 / `.env`（不入库） | 写死在代码/文档 |
+| frp token | 仅服务器和客户端 | 分享到群聊 |
+| Tailscale 账号 | 受信任管理员邀请 | 共享账号 |
+
+常用检查：
+
+```bash
+# 扫描仓库里是否误提交密钥（在仓库根目录执行）
+git grep -l "BEGIN.*PRIVATE KEY" || echo "未发现私钥"
+
+# 也可以使用 gitleaks 等工具做自动化扫描
+```
+
+---
+
+## 5. 排查工具箱
+
+### 5.1 各层工具总览
+
+| 层 | Windows | Linux/macOS |
+|----|---------|-------------|
+| 域名解析 | `nslookup` | `dig` / `nslookup` |
+| 网络可达 | `ping` / `tracert` | `ping` / `traceroute` |
+| 路由 | `route print` | `ip route` |
+| 端口探测 | `Test-NetConnection` | `nc -zv` |
+| 本机监听 | `netstat -ano` | `ss -tlnp` / `lsof -i` |
+| 抓包 | `pktmon` / Wireshark | `tcpdump` |
+| HTTP 调试 | `curl.exe -v` | `curl -v` |
+
+### 5.2 常用命令示例
+
+```powershell
+# 端口是否可达
+Test-NetConnection 1.2.3.4 -Port 8000
+
+# 追踪路由（看卡在哪一跳）
+tracert 1.2.3.4
+
+# 本机端口监听
+netstat -ano | findstr :8000
+
+# HTTP 请求详情
+curl.exe -v http://1.2.3.4:8000/health
+```
+
+Linux/macOS：
+
+```bash
+# 端口是否可达
+nc -zv 1.2.3.4 8000
+
+# 追踪路由
+traceroute -n 1.2.3.4
+
+# 本机监听
+ss -tlnp | grep 8000
+
+# 抓包看握手（需要 root）
+sudo tcpdump -i any host 1.2.3.4 and port 8000
+```
+
+---
+
+## 6. 五层排查法（再强化）
+
+```text
+① DNS    nslookup host        → 域名能解析吗？
+② 路由   ping / tracert       → 网络可达吗？
+③ 防火墙 端口探测              → 端口放行了吗？
+④ 服务   netstat / docker ps  → 服务监听了吗？
+⑤ 应用   curl -v / 看日志     → 应用正常吗？
+```
+
+### 6.1 每层失败的长相
+
+| 层 | 典型报错 | 处理 |
+|----|----------|------|
+| DNS | `could not resolve host` | 换 DNS、连 VPN、查 hosts |
+| 路由 | `Request timed out` / `Destination Host Unreachable` | 查网关、安全组、运营商 |
+| 防火墙 | 端口探测 timeout / refused | 放行端口、检查绑定的地址 |
+| 服务 | 探测通但连不上 | 查进程、日志、重启服务 |
+| 应用 | 400/401/500 | 查代码、配置、依赖服务 |
+
+---
+
+## 7. 常见问题速查表
+
+| 问题 | 可能原因 | 优先检查 |
+|------|----------|----------|
+| 内网 IP 从外面 ping 不通 | 私网地址本来就不公网可达 | 改用 VPN/穿透 |
+| 公网 IP 也连不上 | 安全组/防火墙没放行 | `Test-NetConnection` |
+| 数据库连不上 | 只监听 127.0.0.1，或端口没放 | `ss -tlnp`、配置 `listen_addresses` |
+| 隧道一会就断 | 空闲超时/NAT 映射过期 | 加 `ServerAliveInterval`、`PersistentKeepalive` |
+| Tailscale 走了中继很慢 | 打洞失败 | `tailscale netcheck`、两端检查防火墙 |
+| 域名能解析但访问慢 | 跨运营商/跨境绕路 | `tracert` 看路径，考虑加速/CDN |
+| 同事访问你失败，你访问同事成功 | 你的 NAT/防火墙不允许入站 | 用穿透或 Mesh VPN |
+| 端口被占用 | 服务冲突 | `netstat -ano` 找 PID 处理 |
+
+---
+
+## 8. 组网后的日常运维
+
+```text
+每周：
+  □ tailscale status 检查成员和设备
+  □ 检查 SSH 登录日志：sudo journalctl -u ssh -n 100
+  □ 检查穿透工具的访问日志
+  □ 确认没有意外开放的端口
+
+成员变更：
+  □ 新人加入：发密钥/邀请、登记设备、给最小权限
+  □ 有人离开：立即回收 Tailscale 权限、删 SSH 公钥、轮换共享 token
+```
+
+---
+
+## 9. 动手练习
+
+1. 检查你的 SSH 配置，确认 `PasswordAuthentication no` 已生效。
+2. 用 `git grep` 或 gitleaks 扫描一个测试仓库，确认没有私钥入库。
+3. 搭建"故障演练"：故意关闭一个端口，用五层排查法定位到第 3 或第 4 层。
+4. 用 `tracert` 追踪到 `github.com` 的路径，找到延迟最高的跳点。
+5. 给团队的 Mesh VPN 配置一条最小权限 ACL，验证拒绝生效。
+6. 写一份 10 行的《团队网络运维清单》文档，包含：拓扑、端口清单、成员登记表、应急联系人。
+
+---
+
+## 10. 小结
+
+| 主题 | 一句话 |
+|------|--------|
+| 安全基线 | 密钥登录、最小暴露、HTTPS、日志 |
+| 防火墙 | 云安全组 + 本机防火墙双重控制 |
+| 排查工具 | DNS→路由→防火墙→服务→应用 |
+| 常见问题 | 九成是地址/端口/配置不一致 |
+| 运维 | 定期检查成员、端口和日志 |
+
+**把网络打通是能力，把网络管住是责任。**
+
+---
+
+## 课程结束
+
+恭喜你完成《组网与异地协作》全部课程！
+
+建议回到 [README.md](README.md)，按"学习方式"里的建议，把第 7 课的小组实战
+和本课的安全清单落地到你的团队。

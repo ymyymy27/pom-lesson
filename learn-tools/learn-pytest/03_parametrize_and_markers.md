@@ -1,0 +1,241 @@
+# 第3课：参数化与标记
+
+## 1. 为什么需要参数化？
+
+### 一句话解释
+
+**参数化 = 一份测试逻辑，多组输入输出** —— 避免复制粘贴，表格驱动测试。
+
+### 对比
+
+```python
+# ❌ 重复
+def test_email_valid_1():
+    assert is_valid_email("a@b.com")
+
+def test_email_valid_2():
+    assert is_valid_email("user+tag@example.org")
+
+def test_email_invalid():
+    assert not is_valid_email("invalid")
+
+# ✅ 参数化
+@pytest.mark.parametrize("email,expected", [
+    ("a@b.com", True),
+    ("user+tag@example.org", True),
+    ("invalid", False),
+    ("", False),
+])
+def test_email_validation(email, expected):
+    assert is_valid_email(email) == expected
+```
+
+---
+
+## 2. @pytest.mark.parametrize 语法
+
+```python
+@pytest.mark.parametrize("a,b,expected", [
+    (1, 2, 3),
+    (0, 0, 0),
+    (-1, 1, 0),
+    pytest.param(1, -1, 0, id="pos_neg"),  # 自定义 id
+])
+def test_add(a, b, expected):
+    assert a + b == expected
+```
+
+**运行时可看到：**
+
+```
+test_add[1-2-3] PASSED
+test_add[0-0-0] PASSED
+test_add[pos_neg] PASSED
+```
+
+### 多组参数
+
+```python
+@pytest.mark.parametrize("x", [1, 2, 3])
+@pytest.mark.parametrize("y", [10, 20])
+def test_multiply(x, y):
+    assert x * y > 0
+# 共 3 × 2 = 6 个测试
+```
+
+### 参数化 + fixture
+
+```python
+@pytest.fixture
+def base_url():
+    return "http://localhost:8000"
+
+@pytest.mark.parametrize("path", ["/", "/health", "/api/users"])
+def test_routes(base_url, path, client):
+    response = client.get(base_url + path)
+    assert response.status_code != 404
+```
+
+---
+
+## 3. 标记（markers）
+
+### 3.1 内置标记
+
+```python
+@pytest.mark.skip(reason="尚未实现")
+def test_future():
+    ...
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="需要 3.12+")
+def test_new_syntax():
+    ...
+
+@pytest.mark.xfail(reason="已知 Bug #42")
+def test_known_issue():
+    assert broken_function() == "fixed"  # 失败不算 error
+```
+
+| 标记 | 含义 |
+|------|------|
+| `skip` | 跳过，不计入失败 |
+| `skipif` | 条件跳过 |
+| `xfail` | 预期失败（失败=通过，意外通过=XPASS） |
+
+### 3.2 自定义标记
+
+```python
+@pytest.mark.slow
+def test_full_import():
+    import heavy_library
+    ...
+
+@pytest.mark.integration
+def test_real_database():
+    ...
+```
+
+**必须在配置中注册**（否则 pytest 警告）：
+
+```ini
+# pytest.ini
+[pytest]
+markers =
+    slow: 耗时超过 1 秒的测试
+    integration: 需要外部服务的测试
+```
+
+### 3.3 按标记运行
+
+```bash
+pytest -m slow                 # 只跑 slow
+pytest -m "not slow"           # 排除 slow（日常开发常用）
+pytest -m "integration and not slow"
+```
+
+---
+
+## 4. 组合：参数化 + 标记
+
+```python
+@pytest.mark.slow
+@pytest.mark.parametrize("size", [1000, 10000, 100000])
+def test_sort_large(size):
+    data = list(range(size, 0, -1))
+    assert sorted(data) == list(range(1, size + 1))
+```
+
+---
+
+## 5. 测试选择与过滤
+
+| 命令 | 作用 |
+|------|------|
+| `pytest tests/test_api.py` | 指定文件 |
+| `pytest tests/test_api.py::TestUsers::test_create` | 指定类/方法 |
+| `pytest -k "user and not delete"` | 名称表达式 |
+| `pytest -m integration` | 标记 |
+| `pytest --lf` | 上次失败 |
+| `pytest --ff` | 先跑上次失败 |
+| `pytest -x` | 首个失败停止 |
+| `pytest --maxfail=3` | 失败 3 个后停止 |
+
+---
+
+## 6. 动态 skip / xfail
+
+```python
+def test_requires_api_key(api_key):
+    if not api_key:
+        pytest.skip("未设置 API_KEY 环境变量")
+    ...
+
+def test_flaky_on_ci():
+    if os.getenv("CI"):
+        pytest.xfail("CI 环境不稳定")
+    ...
+```
+
+---
+
+## 7. 组织大量测试
+
+### 目录结构
+
+```
+tests/
+├── unit/
+│   ├── test_calculator.py
+│   └── test_validators.py
+├── integration/
+│   └── test_api.py
+└── conftest.py
+```
+
+```bash
+pytest tests/unit/              # 只跑单元
+pytest tests/integration/ -m integration
+```
+
+### 命名约定
+
+- 单元：`test_<模块>_<行为>`
+- 集成：`test_<服务>_integration_<场景>`
+
+---
+
+## 8. 练习
+
+1. 为 `is_valid_password(pwd)` 写参数化测试（长度、大小写、数字组合）
+2. 给耗时测试加 `@pytest.mark.slow`，日常用 `pytest -m "not slow"`
+3. 用 `pytest.param(..., marks=pytest.mark.xfail)` 标记已知失败用例
+
+<details>
+<summary>密码验证参数化参考</summary>
+
+```python
+@pytest.mark.parametrize("password,valid", [
+    ("Abcdef12", True),
+    ("short1A", False),
+    ("nouppercase1", False),
+    ("NOLOWERCASE1", False),
+    ("NoDigitsHere", False),
+    ("", False),
+])
+def test_password(password, valid):
+    assert is_valid_password(password) == valid
+```
+
+</details>
+
+---
+
+## 9. 自检清单
+
+- [ ] 会用 `@pytest.mark.parametrize` 减少重复
+- [ ] 能注册并使用自定义 marker
+- [ ] 会用 `-m`、`-k` 过滤测试
+- [ ] 理解 skip / xfail 的区别
+- [ ] 知道 `--lf` / `-x` 在调试时的用法
+
+👉 下一课：[04_mocking_and_isolation.md](04_mocking_and_isolation.md)

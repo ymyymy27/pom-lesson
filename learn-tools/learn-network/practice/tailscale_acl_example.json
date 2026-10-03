@@ -1,0 +1,14 @@
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["autogroup:member"],
+      "dst": ["100.101.0.0/10:*"]
+    },
+    {
+      "action": "accept",
+      "src": ["alice@example.com"],
+      "dst": ["10.20.0.0/16:22,3306,5432"]
+    }
+  ]
+}

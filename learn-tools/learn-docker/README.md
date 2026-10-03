@@ -1,0 +1,26 @@
+# Docker 容器化 从零开始学习教程
+
+## 课程目录
+
+| 课程 | 文件 | 内容 |
+|------|------|------|
+| 参考 | `00_docker_syntax.md` | Docker 语法结构参考（CLI / Dockerfile / Compose） |
+| 第1课 | `01_docker_basics.md` | Docker 是什么、安装、核心概念（镜像/容器/仓库） |
+| 第2课 | `02_image_and_container.md` | 镜像管理、容器操作、Dockerfile 编写 |
+| 第3课 | `03_docker_compose.md` | Compose 多容器编排、YAML 配置、服务依赖 |
+| 第4课 | `04_network_and_volume.md` | 网络模式、数据持久化、环境变量管理 |
+| 第5课 | `05_practical_deploy.md` | 实战部署（Python Web / 数据库 / Nginx 反代） |
+| 第6课 | `06_ai_team_docker.md` | AI 团队 Docker 协作开发（微服务架构 / 依赖隔离 / GPU） |
+
+## 学习方式
+
+- Markdown 文档 + 终端动手练习
+- 需要先安装 Docker Desktop
+- 每课都有可运行的示例命令
+- 按顺序学习，每课都有动手练习
+
+## 环境准备
+
+- **Windows**: 安装 Docker Desktop（需要 WSL2）
+- **Mac**: 安装 Docker Desktop
+- **Linux**: `sudo apt install docker.io docker-compose`

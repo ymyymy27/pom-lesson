@@ -1,0 +1,251 @@
+# 第1课：认证与访问控制
+
+## 1. 认证方式对比
+
+| 方式 | 原理 | 适用 | 注意 |
+|------|------|------|------|
+| Session Cookie | 服务端存 session_id | 传统 Web | CSRF 防护、SameSite |
+| JWT | 自包含 Token，无状态 | API、Mobile、微服务 | 撤销难、别存敏感信息 |
+| OAuth2 | 委托授权 | 第三方登录、API 授权 | 理解 Flow 选型 |
+| API Key | 静态密钥 | 服务端集成、Webhook | 轮换、限流、Scope |
+| mTLS | 双向证书 | 服务间通信 | 证书管理复杂 |
+
+---
+
+## 2. Session vs JWT
+
+### Session Cookie
+
+```
+登录 → 服务端创建 Session → Set-Cookie: session_id=abc
+后续请求 → Cookie 自动携带 → 服务端查 Session
+
+优点：易撤销（删 Session）、敏感信息在服务端
+缺点：有状态、跨域/跨端麻烦、水平扩展需 Session 共享
+```
+
+### JWT
+
+```
+登录 → 服务端签发 JWT → 客户端存储（Header / LocalStorage）
+后续请求 → Authorization: Bearer eyJ...
+
+JWT 结构：
+  Header  .  Payload  .  Signature
+  {alg}     {sub,exp}    HMAC/RSA
+
+优点：无状态、跨端、微服务友好
+缺点：无法即时撤销（需黑名单或短过期）、Payload 不加密（只签名）
+```
+
+### 推荐组合：JWT + Refresh Token
+
+```
+Access Token（JWT）：
+  - 短过期：15 分钟
+  - 存内存 / Authorization Header
+  - 用于 API 调用
+
+Refresh Token：
+  - 长过期：7 天
+  - HttpOnly + Secure + SameSite Cookie
+  - 仅用于 /auth/refresh endpoint
+  - 可撤销（存 DB / Redis 白名单）
+
+流程：
+  登录 → 返回 Access + Set Refresh Cookie
+  Access 过期 → POST /auth/refresh（带 Cookie）→ 新 Access
+  登出 → 删 Refresh Token（服务端）+ 清 Cookie
+```
+
+---
+
+## 3. OAuth2 核心 Flow
+
+### Authorization Code + PKCE（推荐，Web/Mobile）
+
+```
+用户 → 授权页（Google/GitHub）
+    → 同意 → redirect 带 code
+    → 客户端用 code + PKCE verifier 换 Token
+    → Access Token + Refresh Token
+
+PKCE 防授权码拦截攻击（Mobile/SPA 必用）
+```
+
+### Client Credentials（服务间）
+
+```
+Service A → POST /token（client_id + client_secret）
+         → Access Token
+         → 调用 Service B API
+
+适用：后端到后端，无用户参与
+```
+
+### Scope 控制
+
+```
+OAuth2 Scope 示例：
+  read:tasks
+  write:tasks
+  admin:projects
+
+Token 只包含被授权的 Scope
+API 检查：endpoint 需要 write:tasks，Token 必须有
+```
+
+---
+
+## 4. 授权模型
+
+### RBAC（Role-Based Access Control）
+
+```
+User → Role → Permission
+
+Alice → ProjectAdmin → [create_task, delete_task, invite_member]
+Bob  → Member       → [create_task, view_task]
+
+TaskFlow 示例角色：
+  Owner：全部权限
+  Admin：管理成员 + 任务
+  Member：创建/编辑自己的任务
+  Viewer：只读
+```
+
+```python
+def require_permission(permission: str):
+    def decorator(func):
+        async def wrapper(user: User, project_id: str, *args, **kwargs):
+            role = get_user_role(user.id, project_id)
+            if permission not in ROLE_PERMISSIONS[role]:
+                raise HTTPException(403, "Forbidden")
+            return await func(user, project_id, *args, **kwargs)
+        return wrapper
+    return decorator
+
+@require_permission("delete_task")
+async def delete_task(user, project_id, task_id):
+    ...
+```
+
+### ABAC（Attribute-Based Access Control）
+
+```
+基于属性动态判断：
+  user.department == resource.department
+  user.level >= 3 AND resource.classification == "public"
+
+适用：复杂策略、细粒度
+工具：OPA（Open Policy Agent）、Casbin
+```
+
+### 资源级授权（最重要！）
+
+```
+❌ 只检查「用户已登录」
+❌ 只检查「用户是 Member 角色」
+
+✅ 检查「用户是否有权访问这个具体 Task」
+
+GET /tasks/task_123
+→ task.project_id → user 是否该 project 成员？
+→ task.visibility → 是否允许查看？
+```
+
+**IDOR（Insecure Direct Object Reference）** 是最常见越权漏洞。
+
+---
+
+## 5. TaskFlow 权限矩阵
+
+| 操作 | Owner | Admin | Member | Viewer |
+|------|-------|-------|--------|--------|
+| 查看任务 | ✅ | ✅ | ✅ | ✅ |
+| 创建任务 | ✅ | ✅ | ✅ | ❌ |
+| 编辑他人任务 | ✅ | ✅ | ❌ | ❌ |
+| 删除任务 | ✅ | ✅ | 自己的 | ❌ |
+| 邀请成员 | ✅ | ✅ | ❌ | ❌ |
+| 删除项目 | ✅ | ❌ | ❌ | ❌ |
+
+---
+
+## 6. API 安全实践
+
+### 认证 Header
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+### 防暴力破解
+
+```
+登录失败 5 次 → 账户锁定 15 分钟
+或 CAPTCHA
+IP 级 + 账户级限流
+```
+
+### 密码存储
+
+```python
+# ❌ 明文 / MD5 / SHA256（无 salt）
+# ✅ bcrypt / argon2 / scrypt
+
+from passlib.hash import bcrypt
+hashed = bcrypt.hash("user_password")
+bcrypt.verify("user_password", hashed)  # True
+```
+
+### CORS
+
+```
+Web 前端跨域调用 API 需要 CORS
+
+Access-Control-Allow-Origin: https://app.taskflow.com  ← 不要用 *
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, PATCH, DELETE
+```
+
+---
+
+## 7. 多租户隔离
+
+```
+TaskFlow 多团队场景：
+
+数据隔离：
+  每个 query 带 tenant_id / project_id 过滤
+  Row-Level Security（PostgreSQL RLS）
+
+逻辑隔离：
+  middleware 从 JWT 提取 user → 查 membership → 注入 context
+
+❌ SELECT * FROM tasks WHERE id = ?  （无 tenant 检查）
+✅ SELECT * FROM tasks WHERE id = ? AND project_id IN (user_projects)
+```
+
+---
+
+## 8. 动手练习
+
+1. 设计 TaskFlow 的 JWT Payload 结构（claims）
+2. 画出 OAuth2 Authorization Code + PKCE 时序图
+3. 为 TaskFlow 写 RBAC 权限矩阵（至少 8 个操作）
+4. 分析 `GET /tasks/{id}` 的 IDOR 风险并设计防护
+
+---
+
+## 9. 自检清单
+
+- [ ] 能对比 Session 与 JWT 的优缺点
+- [ ] 理解 Access Token + Refresh Token 分工
+- [ ] 知道 OAuth2 主要 Flow 及适用场景
+- [ ] 能设计 RBAC 权限矩阵
+- [ ] 理解 IDOR 及资源级授权的重要性
+- [ ] 知道密码应使用 bcrypt/argon2
+
+---
+
+**下一课** → [02_security_for_architects.md](02_security_for_architects.md)

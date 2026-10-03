@@ -1,0 +1,149 @@
+# 第 01 节：JSON 序列化与数据模型
+
+## 本节目标
+
+- 掌握手写 fromJson / toJson
+- 用 json_serializable / freezed 生成样板代码
+- 建立"模型不可变"的数据设计习惯
+
+## 一、手写序列化
+
+```dart
+class Task {
+  const Task({
+    required this.id,
+    required this.title,
+    this.done = false,
+    this.priority = 0,
+  });
+
+  final int id;
+  final String title;
+  final bool done;
+  final int priority;
+
+  factory Task.fromJson(Map<String, dynamic> json) => Task(
+        id: json['id'] as int,
+        title: json['title'] as String,
+        done: json['done'] as bool? ?? false,
+        priority: json['priority'] as int? ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'done': done,
+        'priority': priority,
+      };
+
+  Task copyWith({int? id, String? title, bool? done, int? priority}) => Task(
+        id: id ?? this.id,
+        title: title ?? this.title,
+        done: done ?? this.done,
+        priority: priority ?? this.priority,
+      );
+}
+```
+
+手写的问题：字段一多，样板代码爆炸，容易漏字段、写错类型。
+
+## 二、json_serializable：自动生成
+
+```powershell
+flutter pub add json_annotation dev:build_runner dev:json_serializable
+```
+
+```dart
+import 'package:json_annotation/json_annotation.dart';
+
+part 'task.g.dart';              // 生成文件，勿手改
+
+@JsonSerializable()
+class Task {
+  const Task({
+    required this.id,
+    required this.title,
+    this.done = false,
+    this.priority = 0,
+  });
+
+  final int id;
+  final String title;
+  final bool done;
+  final int priority;
+
+  factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
+
+  Map<String, dynamic> toJson() => _$TaskToJson(this);
+}
+```
+
+生成命令：
+
+```powershell
+dart run build_runner build --delete-conflicting-outputs
+# 或监听模式：dart run build_runner watch
+```
+
+字段名与 JSON 不一致时用注解：
+
+```dart
+@JsonSerializable()
+class Task {
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;          // 自动处理 ISO8601 字符串
+}
+```
+
+## 三、freezed：模型 + 不可变性 + 模式匹配
+
+```powershell
+flutter pub add freezed_annotation dev:freezed dev:build_runner
+```
+
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'task.freezed.dart';
+part 'task.g.dart';
+
+@freezed
+abstract class Task with _$Task {
+  const factory Task({
+    required int id,
+    required String title,
+    @Default(false) bool done,
+    @Default(0) int priority,
+    @Default(TaskStatus.todo) TaskStatus status,
+  }) = _Task;
+
+  factory Task.fromJson(Map<String, dynamic> json) => _$TaskFromJson(json);
+}
+```
+
+freezed 免费赠送：
+
+- `copyWith`（含深拷贝）
+- `==` / `hashCode`（值比较）
+- 不可变（所有字段 final）
+- 可配合 sealed class 做状态建模
+
+## 四、设计规范
+
+1. **模型不可变**：全部字段 final，更新用 copyWith
+2. **DTO 与实体分离**：API 的原始结构（DTO）与业务模型（Entity）分开，避免 API 变化传染 UI
+3. **日期用 DateTime 类型**，不存字符串
+4. **数字类型显式转换**：`as int`，必要时 `(json['x'] as num).toInt()`
+5. **未知字段容忍**：解析时用 `?? 默认值`，避免后端加字段就崩
+
+## 动手练习
+
+1. 为 TaskFlow 定义 `User`、`Project`、`Task` 三个模型（freezed）
+2. 处理 `created_at`、`due_date` 两个时间字段
+3. 写序列化往返测试：`fromJson(toJson(original)) == original`
+
+## 验收标准
+
+- 能独立配置 build_runner 并生成代码
+- 模型不可变、字段类型安全
+- 序列化往返测试通过

@@ -1,0 +1,163 @@
+# 第4课：索引、约束与查询优化
+
+> 前置：第 3 课  
+> 环境：`practice/seed_demo_graph.py` 已写入约束示例
+
+索引与约束是 Neo4j **上生产的前置条件**——没有它们，数据量稍大查询就会全图扫描。
+
+---
+
+## 1. 约束 vs 索引
+
+| 类型 | 作用 | 示例 |
+|------|------|------|
+| **UNIQUE 约束** | 唯一性 + 自动索引 | `Person.id` 不重复 |
+| **存在性约束** | 属性非空（Enterprise） | `Person.email IS NOT NULL` |
+| **索引** | 加速查找，不保证唯一 | `Person.name` |
+
+```cypher
+CREATE CONSTRAINT person_id IF NOT EXISTS
+FOR (p:Person) REQUIRE p.id IS UNIQUE;
+
+CREATE INDEX person_name IF NOT EXISTS
+FOR (p:Person) ON (p.name);
+
+CREATE INDEX person_status IF NOT EXISTS
+FOR (p:Person) ON (p.status);
+
+// 复合索引 Neo4j 5.13+
+CREATE INDEX person_name_status IF NOT EXISTS
+FOR (p:Person) ON (p.name, p.status);
+```
+
+查看：`SHOW INDEXES;` / `SHOW CONSTRAINTS;`
+
+---
+
+## 2. 何时建索引
+
+| 字段特征 | 是否索引 | 原因 |
+|----------|----------|------|
+| 业务主键 `id` | ✅ UNIQUE 约束 | MERGE 幂等、点查 |
+| 高频 WHERE 条件 | ✅ | 如 `email`、`status` |
+| 高基数 | ✅ | 区分度高 |
+| 低基数（gender） | ⚠️ 慎用 | 选择性差，收益小 |
+| 仅 RETURN 展示 | ❌ | 不参与过滤 |
+
+**顺序：** 大批量导入前**先建约束/索引**，再导数据。
+
+---
+
+## 3. EXPLAIN 与 PROFILE
+
+```cypher
+EXPLAIN
+MATCH (p:Person {name: '张三'})-[:WORKS_ON]->(proj)
+RETURN proj.name;
+
+PROFILE
+MATCH (p:Person {name: '张三'})-[:WORKS_ON*1..3]->(x)
+RETURN x LIMIT 100;
+```
+
+| 命令 | 作用 |
+|------|------|
+| `EXPLAIN` | 显示查询计划，不执行 |
+| `PROFILE` | 实际执行并统计行数、耗时、缓存命中 |
+
+**关注：** `NodeIndexSeek`（走索引）vs `AllNodesScan`（全表扫描）。
+
+---
+
+## 4. 优化原则
+
+### 4.1 模式匹配
+
+```cypher
+// ✅ Label + 索引属性
+MATCH (p:Person {id: $id})-[:WORKS_ON]->(proj) RETURN proj
+
+// ❌ 无 Label 全图扫描
+MATCH (p {id: $id}) RETURN p
+```
+
+### 4.2 可变长度路径
+
+```cypher
+// ✅ 限制跳数 + LIMIT
+MATCH (p:Person {id: $id})-[:REPORTS_TO*1..4]->(boss) RETURN boss LIMIT 50
+
+// ❌ 无上限
+MATCH (p)-[:REPORTS_TO*]->(boss) RETURN boss
+```
+
+生产建议 `*1..N` 的 N ≤ 4；更深路径考虑预计算或图算法。
+
+### 4.3 聚合前先过滤
+
+```cypher
+// ✅ WITH 缩小数据集
+MATCH (p:Person)-[:WORKS_ON]->(proj:Project {status: 'active'})
+WITH proj, count(p) AS cnt WHERE cnt > 1
+RETURN proj.name, cnt
+```
+
+### 4.4 避免大量 DISTINCT
+
+能用 `collect(DISTINCT x)` 或建模阶段去重，就不要对大结果集 `RETURN DISTINCT`。
+
+---
+
+## 5. 常见慢查询场景
+
+| 场景 | 原因 | 方案 |
+|------|------|------|
+| 按 name 查人 | 无索引 | `CREATE INDEX ON (p.name)` |
+| 双向全图 BFS | `*`- 无限制 | 限制深度、Label、LIMIT |
+| 超级节点一度邻居 | 百万边 | `LIMIT` + 分页；业务上拆分 |
+| 复杂 OR 条件 | 无法用单索引 | 拆查询或全文索引 |
+
+---
+
+## 6. 全文索引（Neo4j 5.x）
+
+```cypher
+CREATE FULLTEXT INDEX person_search IF NOT EXISTS
+FOR (p:Person) ON EACH [p.name, p.email];
+
+CALL db.index.fulltext.queryNodes('person_search', '张三~')
+YIELD node, score
+RETURN node.name, score LIMIT 10
+```
+
+适用：模糊搜索、多字段 OR；精确点查仍用普通索引。
+
+---
+
+## 7. 动手练习
+
+1. 对 `Person.email` 添加 UNIQUE 约束，尝试插入重复 email，观察报错
+2. 对「按 name 查 Person」分别 `EXPLAIN` 有/无索引的差异
+3. `PROFILE` 查询：`MATCH (p:Person)-[:REPORTS_TO*]->(x) RETURN x LIMIT 100`，记录 DB Hits
+4. 编写优化版：参与项目数 Top 5 员工（参考 seed 数据）
+
+```cypher
+MATCH (p:Person)-[:WORKS_ON]->(proj:Project)
+RETURN p.name, count(proj) AS project_count
+ORDER BY project_count DESC LIMIT 5
+```
+
+---
+
+## 8. 自检清单
+
+- [ ] 会为业务主键创建 UNIQUE 约束
+- [ ] 会用 EXPLAIN/PROFILE 读查询计划
+- [ ] 理解可变长度路径的风险与 LIMIT
+- [ ] 知道导入前先行创建索引
+
+---
+
+## 下一课
+
+[`05_python_neo4j.md`](05_python_neo4j.md) — Python 驱动

@@ -1,0 +1,369 @@
+# 第4课：网络与数据持久化
+
+## 1. Docker 网络
+
+### 为什么要了解网络？
+
+```
+容器之间怎么通信？
+  web容器 → 怎么连 → db容器？
+  
+外部怎么访问容器？
+  浏览器 → 怎么访问 → web容器？
+```
+
+### 1.1 网络模式
+
+| 模式 | 说明 | 使用场景 |
+|------|------|---------|
+| `bridge` | 默认模式，容器通过虚拟网桥通信 | 大多数场景 |
+| `host` | 容器直接使用主机网络 | 高性能场景 |
+| `none` | 没有网络 | 安全隔离 |
+| `overlay` | 跨主机网络（Swarm） | 集群部署 |
+
+### 1.2 Bridge 网络（默认）
+
+```bash
+# 默认 bridge 网络
+docker run -d --name web nginx
+docker run -d --name db postgres
+
+# 默认网络中，容器之间不能用名字通信！
+# 需要用 --link（已过时）或自定义网络
+```
+
+### 1.3 自定义网络（推荐）
+
+```bash
+# 创建自定义网络
+docker network create mynet
+
+# 在自定义网络中启动容器
+docker run -d --name web --network mynet nginx
+docker run -d --name db --network mynet postgres
+
+# 自定义网络中，容器可以用名字互相访问！
+docker exec web ping db      # ✓ 能通！
+
+# 查看网络
+docker network ls
+docker network inspect mynet
+
+# 删除网络
+docker network rm mynet
+```
+
+### 1.4 Docker Compose 网络
+
+```yaml
+# Compose 自动创建网络，服务之间用服务名通信
+services:
+  web:
+    image: nginx
+    # 可以用 http://db:5432 连接数据库
+    # 可以用 http://redis:6379 连接 Redis
+
+  db:
+    image: postgres:16
+
+  redis:
+    image: redis:7
+```
+
+**Compose 自动做了什么：**
+1. 创建 `项目名_default` 网络
+2. 所有服务加入这个网络
+3. 服务之间用**服务名**作为主机名
+
+```bash
+# 查看 Compose 创建的网络
+docker network ls
+# myproject_default
+```
+
+### 1.5 端口映射
+
+```bash
+# -p 主机端口:容器端口
+docker run -p 8080:80 nginx          # 所有接口
+docker run -p 127.0.0.1:8080:80 nginx  # 只绑定 localhost
+docker run -p 8080-8090:80-90 nginx  # 端口范围
+docker run -P nginx                   # 随机映射所有 EXPOSE 端口
+```
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    ports:
+      - "8000:8000"              # 对外暴露
+  db:
+    # 不写 ports → 只在内部网络可访问（更安全）
+    expose:
+      - "5432"                   # 只声明，不映射到主机
+```
+
+**最佳实践：** 数据库、Redis 等内部服务**不要**映射端口到主机，只在 Docker 内部网络通信。
+
+---
+
+## 2. 数据持久化
+
+### 为什么需要持久化？
+
+```
+容器是"临时"的：
+  docker rm db  → 数据库里的数据全没了！
+
+需要持久化的数据：
+  数据库文件、上传的文件、日志、配置...
+```
+
+### 2.1 三种方式
+
+```
+1. Volumes（数据卷）    ← Docker 管理，推荐
+2. Bind Mounts（绑定挂载） ← 指定主机目录
+3. tmpfs（临时文件系统）  ← 内存中，重启丢失
+```
+
+### 2.2 Volumes（数据卷，推荐）
+
+```bash
+# 创建数据卷
+docker volume create mydata
+
+# 使用数据卷
+docker run -d --name db -v mydata:/var/lib/postgresql/data postgres
+
+# 查看数据卷
+docker volume ls
+docker volume inspect mydata
+
+# 删除数据卷
+docker volume rm mydata
+docker volume prune           # 清理未使用的卷
+```
+
+```yaml
+# docker-compose.yml
+services:
+  db:
+    image: postgres:16
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:                    # 声明命名卷
+```
+
+**优点：** Docker 管理存储位置、可备份、可迁移、性能好。
+
+### 2.3 Bind Mounts（绑定挂载）
+
+```bash
+# 将主机目录挂载到容器
+docker run -v /host/path:/container/path image
+docker run -v $(pwd)/data:/app/data image
+
+# 只读挂载
+docker run -v $(pwd)/config:/app/config:ro image
+```
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    volumes:
+      - ./src:/app/src          # 开发时挂载代码
+      - ./config:/app/config:ro # 配置文件只读
+      - ./logs:/app/logs        # 日志
+```
+
+**适用场景：**
+- 开发时热重载（挂载代码目录）
+- 挂载配置文件
+- 挂载日志目录
+
+### 2.4 数据备份与恢复
+
+```bash
+# 备份数据卷
+docker run --rm -v db_data:/data -v $(pwd):/backup \
+    alpine tar czf /backup/db_backup.tar.gz /data
+
+# 恢复数据卷
+docker run --rm -v db_data:/data -v $(pwd):/backup \
+    alpine tar xzf /backup/db_backup.tar.gz -C /
+
+# PostgreSQL 备份
+docker exec db pg_dump -U user mydb > backup.sql
+
+# PostgreSQL 恢复
+docker exec -i db psql -U user mydb < backup.sql
+```
+
+---
+
+## 3. 环境变量管理
+
+### 3.1 直接传递
+
+```bash
+docker run -e DB_HOST=localhost -e DB_PORT=5432 myapp
+```
+
+### 3.2 .env 文件
+
+```bash
+# .env
+DB_HOST=db
+DB_PORT=5432
+DB_USER=user
+DB_PASSWORD=secret
+SECRET_KEY=my-super-secret-key
+```
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    env_file:
+      - .env
+    # 或单独指定
+    environment:
+      - DB_HOST=db
+      - NODE_ENV=production
+```
+
+### 3.3 Compose 变量替换
+
+```yaml
+# docker-compose.yml 中使用 .env 变量
+services:
+  db:
+    image: postgres:${POSTGRES_VERSION:-16}
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+```
+
+```bash
+# .env
+POSTGRES_VERSION=16
+DB_PASSWORD=mysecret
+```
+
+### 3.4 安全建议
+
+```
+✓ 密码、API Key 放在 .env 文件
+✓ .env 加入 .gitignore
+✓ 提供 .env.example 模板
+✗ 不要把密钥硬编码在 Dockerfile 或代码中
+✗ 不要把 .env 提交到 Git
+```
+
+`.env.example`：
+```bash
+# 复制为 .env 并填写真实值
+DB_HOST=db
+DB_PORT=5432
+DB_USER=user
+DB_PASSWORD=<填写密码>
+SECRET_KEY=<填写密钥>
+```
+
+---
+
+## 4. 健康检查
+
+```yaml
+services:
+  web:
+    build: .
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s          # 检查间隔
+      timeout: 10s           # 超时时间
+      retries: 3             # 失败重试次数
+      start_period: 10s      # 启动等待时间
+
+  db:
+    image: postgres:16
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+```
+
+```bash
+# 查看容器健康状态
+docker ps
+# STATUS 列会显示 (healthy) 或 (unhealthy)
+
+docker inspect --format='{{.State.Health.Status}}' myapp
+```
+
+---
+
+## 5. 日志管理
+
+```bash
+# 查看日志
+docker logs myapp
+docker logs -f myapp                # 实时跟踪
+docker logs --tail 100 myapp        # 最后100行
+docker logs --since 1h myapp        # 最近1小时
+
+# Compose 日志
+docker compose logs
+docker compose logs -f web
+docker compose logs --tail 50 web db
+```
+
+```yaml
+# 配置日志驱动
+services:
+  web:
+    logging:
+      driver: json-file          # 默认
+      options:
+        max-size: "10m"          # 单个日志文件最大10MB
+        max-file: "3"            # 最多保留3个文件
+```
+
+---
+
+## 6. 动手练习
+
+1. 创建自定义网络，启动两个容器，验证能用名字互相访问
+2. 创建一个命名卷，挂载到 PostgreSQL 容器
+3. 停止并删除容器，重新启动，验证数据还在
+4. 用 `.env` 文件管理数据库密码
+5. 给 Web 服务添加健康检查
+6. 配置日志大小限制
+
+---
+
+## 7. 小结
+
+| 概念 | 要点 |
+|------|------|
+| **网络** | 自定义网络 + 服务名通信，内部服务不暴露端口 |
+| **数据卷** | 命名卷用于持久化，绑定挂载用于开发 |
+| **环境变量** | `.env` 文件 + `.gitignore`，不硬编码密钥 |
+| **健康检查** | 确保服务真正可用后再接受依赖 |
+| **日志** | 限制大小，使用 `docker compose logs -f` |
+
+---
+
+**下一课：** `05_practical_deploy.md` - 实战部署

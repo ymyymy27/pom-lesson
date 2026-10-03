@@ -1,0 +1,278 @@
+# 第5课：工作流实战与提交规范
+
+## 1. Git 工作流对比
+
+### 1.1 GitHub Flow（推荐入门）
+
+最简单的工作流，适合小团队和个人项目。
+
+```
+main（始终可部署）
+  │
+  ├── feature/xxx ──→ PR ──→ Review ──→ Merge ──→ 部署
+  │
+  ├── feature/yyy ──→ PR ──→ Review ──→ Merge ──→ 部署
+  │
+  └── fix/zzz     ──→ PR ──→ Review ──→ Merge ──→ 部署
+```
+
+**规则：**
+1. `main` 分支始终可部署
+2. 任何改动都从 `main` 创建新分支
+3. 开发完成后发起 PR
+4. Review 通过后合并到 `main`
+5. 合并后立即部署
+
+### 1.2 Git Flow（适合大型项目）
+
+```
+main ──────────────────────────────────→ 发布版本
+  │                                  ↑
+  └── develop ──→ ──→ ──→ ──→ ──→ release/1.0 ──→ merge
+        │                              │
+        ├── feature/login ──→ merge    │
+        ├── feature/pay   ──→ merge    │
+        │                              │
+        └── hotfix/xxx ─────────────────→ 直接合并到 main
+```
+
+**分支类型：**
+| 分支 | 来源 | 合并到 | 用途 |
+|------|------|--------|------|
+| `main` | - | - | 稳定发布版本 |
+| `develop` | main | release | 开发集成 |
+| `feature/*` | develop | develop | 功能开发 |
+| `release/*` | develop | main + develop | 预发布 |
+| `hotfix/*` | main | main + develop | 紧急修复 |
+
+### 1.3 Trunk-Based（适合 CI/CD）
+
+```
+main ──→──→──→──→──→──→──→──→──→──→  持续部署
+  │↑    │↑    │↑
+  └┘    └┘    └┘
+  短分支  短分支  短分支（1-2天内合并）
+```
+
+**核心思想：** 所有人直接在 `main` 附近工作，分支生命周期极短（1-2天）。
+
+### 怎么选？
+
+| 团队规模 | 推荐工作流 | 理由 |
+|---------|-----------|------|
+| 1人 | GitHub Flow | 简单够用 |
+| 2-5人 | GitHub Flow | 灵活高效 |
+| 5-20人 | Git Flow | 需要发布管理 |
+| 大团队 + CI/CD | Trunk-Based | 快速迭代 |
+
+---
+
+## 2. 提交信息规范
+
+### Conventional Commits（约定式提交）
+
+```
+<类型>(<范围>): <描述>
+
+<正文>（可选）
+
+<脚注>（可选）
+```
+
+### 类型
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| `feat` | 新功能 | `feat(auth): 添加微信登录` |
+| `fix` | 修复 bug | `fix(cart): 修复数量不更新` |
+| `docs` | 文档修改 | `docs: 更新 README` |
+| `style` | 代码格式（不影响逻辑） | `style: 格式化代码` |
+| `refactor` | 重构（不加功能不修 bug） | `refactor: 提取公共方法` |
+| `test` | 测试相关 | `test: 添加登录单元测试` |
+| `chore` | 构建/工具修改 | `chore: 升级依赖版本` |
+| `perf` | 性能优化 | `perf: 优化列表查询速度` |
+
+### 好的 vs 坏的提交信息
+
+```bash
+# ✓ 好的
+git commit -m "feat(user): 添加邮箱验证功能"
+git commit -m "fix(api): 修复 token 过期未刷新的问题"
+git commit -m "docs: 添加 API 文档"
+
+# ✗ 坏的
+git commit -m "更新"
+git commit -m "fix bug"
+git commit -m "改了一些东西"
+git commit -m "111"
+git commit -m "asdfgh"
+```
+
+---
+
+## 3. PR（Pull Request）最佳实践
+
+### PR 模板
+
+```markdown
+## 修改内容
+简要描述做了什么改动
+
+## 修改原因
+为什么要做这个改动（关联 Issue: #123）
+
+## 测试方式
+如何验证这个改动是正确的
+
+## 截图（如有 UI 变化）
+
+## Checklist
+- [ ] 代码已自测通过
+- [ ] 已更新相关文档
+- [ ] 没有引入新的 warning
+```
+
+### Code Review 要点
+
+**Review 别人的代码时关注：**
+- 逻辑是否正确
+- 有没有边界情况没处理
+- 代码可读性
+- 有没有安全问题（SQL 注入、硬编码密钥等）
+- 测试覆盖
+
+**被 Review 时的心态：**
+- Review 是针对代码，不是针对你
+- 积极回应，解释你的思路
+- 接受合理建议，学习进步
+
+---
+
+## 4. 实用 Git 配置
+
+### 别名（alias）
+
+```bash
+# 设置常用别名
+git config --global alias.st status
+git config --global alias.co checkout
+git config --global alias.br branch
+git config --global alias.ci commit
+git config --global alias.lg "log --oneline --graph --all"
+git config --global alias.last "log -1 HEAD"
+git config --global alias.unstage "restore --staged"
+
+# 使用
+git st          # = git status
+git co main     # = git checkout main
+git lg          # 漂亮的图形化日志
+git last        # 查看最近一次提交
+```
+
+### 有用的全局配置
+
+```bash
+# 自动处理换行符（跨平台协作）
+git config --global core.autocrlf true    # Windows
+git config --global core.autocrlf input   # Mac/Linux
+
+# pull 时默认 rebase（更干净）
+git config --global pull.rebase true
+
+# 默认推送当前分支
+git config --global push.default current
+
+# 彩色输出
+git config --global color.ui auto
+```
+
+---
+
+## 5. 完整实战：从零到部署
+
+```bash
+# ========== 项目初始化 ==========
+mkdir my-app && cd my-app
+git init
+echo "# My App" > README.md
+echo "__pycache__/" > .gitignore
+echo ".env" >> .gitignore
+git add . && git commit -m "chore: 初始化项目"
+
+# 在 GitHub 创建仓库后
+git remote add origin git@github.com:user/my-app.git
+git push -u origin main
+
+# ========== 功能开发 ==========
+# 创建功能分支
+git switch -c feat/user-auth
+
+# 开发...
+echo "def login(): pass" > auth.py
+git add . && git commit -m "feat(auth): 添加登录函数骨架"
+
+echo "def register(): pass" >> auth.py
+git add . && git commit -m "feat(auth): 添加注册功能"
+
+# 推送分支，创建 PR
+git push origin feat/user-auth
+# → 在 GitHub 创建 PR，等待 Review
+
+# ========== 紧急修复 ==========
+git stash push -m "auth功能开发中"
+git switch main
+git switch -c hotfix/fix-crash
+echo "# fixed" > fix.py
+git add . && git commit -m "fix: 修复首页崩溃问题"
+git push origin hotfix/fix-crash
+# → 创建 PR，快速 Review，合并
+
+# 回到功能开发
+git switch feat/user-auth
+git stash pop
+
+# 同步 main 的更新
+git rebase main
+
+# ========== 合并上线 ==========
+# PR Review 通过，在 GitHub 上合并
+# 本地同步
+git switch main
+git pull
+
+# 打版本标签
+git tag -a v1.1.0 -m "添加用户认证功能"
+git push origin v1.1.0
+
+# 清理分支
+git branch -d feat/user-auth
+git push origin --delete feat/user-auth
+```
+
+---
+
+## 6. 动手练习
+
+1. 给你的 `git-practice` 仓库配置 Git 别名
+2. 用 Conventional Commits 规范提交 3 个改动
+3. 模拟一次完整的功能开发流程：建分支 → 开发 → 推送 → PR
+4. 打一个 `v1.0.0` 标签并推送
+5. 用 `git lg` 查看你的图形化提交历史
+
+---
+
+## 7. 小结
+
+| 内容 | 要点 |
+|------|------|
+| 工作流 | 小团队用 GitHub Flow，大项目用 Git Flow |
+| 提交规范 | `类型(范围): 描述`，如 `feat(auth): 添加登录` |
+| PR | 清晰描述、关联 Issue、Code Review |
+| 别名 | `git st`/`git lg` 等提高效率 |
+| 完整流程 | 建分支 → 开发 → 推送 → PR → Review → 合并 → 打标签 |
+
+---
+
+**learn-git 课程完成！** 🎉
+
+回到总目录：[learn-tools README](../README.md)

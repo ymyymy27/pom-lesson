@@ -1,0 +1,37 @@
+version: "1.0.0"
+domain: org_knowledge_graph
+
+nodes:
+  Person:
+    description: 公司员工
+    properties:
+      id:       { type: string, required: true, unique: true }
+      name:     { type: string, required: true, indexed: true }
+      email:    { type: string, indexed: true }
+      title:    { type: string }
+      status:   { type: enum, values: [active, inactive] }
+    relations_out:
+      - WORKS_AT:    { target: Company, properties: [since, role] }
+      - MEMBER_OF:   { target: Department }
+      - REPORTS_TO:  { target: Person }
+      - WORKS_ON:    { target: Project, properties: [role] }
+
+  Company:
+    properties:
+      id:   { type: string, required: true, unique: true }
+      name: { type: string, required: true, indexed: true }
+
+  Department:
+    properties:
+      id:   { type: string, required: true, unique: true }
+      name: { type: string, required: true }
+    relations_out:
+      - BELONGS_TO: { target: Company }
+
+  Project:
+    properties:
+      id:     { type: string, required: true, unique: true }
+      name:   { type: string, required: true }
+      status: { type: enum, values: [planning, active, archived] }
+    relations_out:
+      - OWNED_BY: { target: Person }

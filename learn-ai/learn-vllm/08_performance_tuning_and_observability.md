@@ -1,0 +1,221 @@
+# 第8课：性能调优与可观测性
+
+> 上一课：[`07_production_deployment.md`](07_production_deployment.md) · 课程完结 → [`README.md`](README.md)
+
+---
+
+## 1. 核心性能指标
+
+| 指标 | 含义 | 用户感知 |
+|------|------|---------|
+| **TTFT** | 首 token 时间 | 「开始回复快不快」 |
+| **TPOT** | 每输出 token 时间 | 「打字速度」 |
+| **E2E Latency** | 整请求耗时 | TTFT + TPOT × 输出长度 |
+| **Throughput** | tokens/s（系统级） | 成本与容量 |
+| **QPS** | 每秒完成请求数 | 并发能力 |
+| **GPU 利用率** | SM / 显存占用 | 资源是否浪费 |
+
+```
+总延迟 ≈ TTFT + TPOT × output_tokens
+
+例：TTFT=200ms, TPOT=30ms, 输出 200 tokens
+  E2E ≈ 200 + 30×200 = 6200ms ≈ 6.2s
+```
+
+**SLO 示例：**
+- TTFT P95 < 500ms（短 prompt）
+- E2E P99 < 15s（输出 512 tokens）
+- 系统吞吐 > 2000 tokens/s
+
+---
+
+## 2. 调参优先级
+
+```
+1. 选对模型与量化（显存够 / 精度够）
+2. max-model-len（够用即可，不要过大）
+3. max-num-seqs / max-num-batched-tokens（吞吐甜点）
+4. gpu-memory-utilization（0.85–0.95）
+5. enable-prefix-caching（RAG / 固定 system）
+6. Chunked Prefill（默认开，混合负载）
+7. 投机解码（decode 延迟敏感）
+8. TP/PP（单卡不够时）
+```
+
+---
+
+## 3. 基准测试脚本
+
+```python
+"""practice/benchmark_client.py 核心逻辑"""
+import asyncio
+import time
+import statistics
+from openai import AsyncOpenAI
+
+async def benchmark(
+    base_url: str = "http://localhost:8000/v1",
+    api_key: str = "changeme",
+    model: str = "qwen-7b",
+    concurrency: int = 32,
+    num_requests: int = 100,
+    prompt: str = "用100字介绍机器学习",
+    max_tokens: int = 128,
+):
+    client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+    latencies: list[float] = []
+    ttfts: list[float] = []
+    sem = asyncio.Semaphore(concurrency)
+
+    async def one_request():
+        async with sem:
+            start = time.perf_counter()
+            ttft = None
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            async for chunk in stream:
+                if chunk.choices[0].delta.content and ttft is None:
+                    ttft = time.perf_counter() - start
+            elapsed = time.perf_counter() - start
+            latencies.append(elapsed)
+            if ttft:
+                ttfts.append(ttft)
+
+    wall_start = time.perf_counter()
+    await asyncio.gather(*[one_request() for _ in range(num_requests)])
+    wall = time.perf_counter() - wall_start
+
+    def pct(data: list[float], p: float) -> float:
+        s = sorted(data)
+        return s[int(len(s) * p)]
+
+    print(f"并发={concurrency}, 请求数={num_requests}")
+    print(f"QPS: {num_requests / wall:.2f}")
+    print(f"E2E  avg={statistics.mean(latencies):.3f}s  p95={pct(latencies, 0.95):.3f}s")
+    if ttfts:
+        print(f"TTFT avg={statistics.mean(ttfts):.3f}s  p95={pct(ttfts, 0.95):.3f}s")
+
+if __name__ == "__main__":
+    asyncio.run(benchmark())
+```
+
+运行：`python practice/benchmark_client.py`
+
+---
+
+## 4. vLLM vs 其他框架（参考数据）
+
+以下为 **7B 模型、单 A100、高并发** 下的典型量级（实际因负载而异）：
+
+| 框架 | 相对吞吐 | P99 延迟 | 备注 |
+|------|---------|---------|------|
+| HF generate | 1x | 高 | 无连续批处理 |
+| TGI | 3–8x | 中低 | 生产特性全 |
+| vLLM | 10–24x | 中 | PagedAttention |
+| SGLang | 10–20x | 中 | 复杂控制流优 |
+
+**不要死记数字**——用你自己的 prompt 分布压测。
+
+---
+
+## 5. 监控指标
+
+vLLM 暴露 Prometheus metrics（端口通常与 API 同或独立）：
+
+| 指标 | 含义 |
+|------|------|
+| `vllm:num_requests_running` | 正在推理的请求数 |
+| `vllm:num_requests_waiting` | 排队等待数 |
+| `vllm:gpu_cache_usage_perc` | KV cache 显存使用率 |
+| `vllm:avg_generation_throughput` | 生成吞吐 |
+| `vllm:time_to_first_token_seconds` | TTFT 分布 |
+
+### 告警规则示例
+
+```yaml
+# Prometheus alert rules（概念）
+- alert: VLLMQueueHigh
+  expr: vllm:num_requests_waiting > 50
+  for: 5m
+  annotations:
+    summary: vLLM 排队过长，考虑扩容
+
+- alert: VLLMGPUCacheFull
+  expr: vllm:gpu_cache_usage_perc > 0.95
+  for: 2m
+  annotations:
+    summary: KV cache 接近满，可能 OOM 或需降并发
+```
+
+---
+
+## 6. 故障排查手册
+
+| 症状 | 可能原因 | 动作 |
+|------|---------|------|
+| TTFT 飙升 | 长 prefill / 排队 / 冷启动 | 看 waiting 队列；开 prefix cache |
+| TPOT 高 | decode batch 小 / 量化慢 | 提 max-num-seqs |
+| OOM | max-model-len 过大 / 并发过高 | 降参数或量化 |
+| 吞吐不随并发升 | 已达 GPU 上限 | 加 GPU 副本 |
+| 输出质量差 | 量化过度 / template 错 | 换 FP16 或检查 chat template |
+| P99 长尾 | 混合长短请求 | Chunked Prefill；分离 prefill |
+
+---
+
+## 7. 与 learn-se 性能工程联动
+
+| vLLM 概念 | learn-se 对应 |
+|-----------|--------------|
+| TTFT/TPOT 分布 | `learn-performance/00` 延迟 p50/p95/p99 |
+| 压测方法论 | `learn-performance/03_load_testing.md` |
+| 容量规划 | `learn-system-design/01_capacity_estimation.md` |
+| SLO | `learn-reliability/01_sli_slo_sla.md` |
+
+---
+
+## 8. 课程总结
+
+```
+第1课：推理瓶颈 → 为什么需要 vLLM
+第2课：PagedAttention → KV Cache 显存管理
+第3课：连续批处理 → 调度器与 Chunked Prefill
+第4课：OpenAI API → 最快上手生产
+第5课：Python API → 离线批处理与 Embedding
+第6课：量化 + 多 GPU → 降成本、上大盘
+第7课：Docker/K8s → 生产架构
+第8课：压测 + 监控 → 持续优化
+```
+
+**下一步学习：**
+- [`stage-11-ai-engineering/`](../stage-11-ai-engineering/) — FastAPI 网关封装
+- [`stage-12-mlops/`](../stage-12-mlops/) — MLflow + 全链路 MLOps
+- [`learn-se/learn-performance/`](../learn-se/learn-performance/) — 通用性能工程
+
+---
+
+## 9. 动手练习
+
+1. 对 vLLM 服务跑 `benchmark_client.py`，记录 concurrency=8/32/64 的 QPS 与 P95
+2. 固定并发，对比 `max-num-seqs=32` 与 `128` 的吞吐
+3. 设计 3 条 Prometheus 告警规则
+4. 写一份 1 页「vLLM 容量估算」：100 QPS、平均 512 输出 token，需要几卡？
+
+---
+
+## 10. 自检清单
+
+- [ ] 能解释 TTFT、TPOT、吞吐、QPS 的含义
+- [ ] 能运行异步压测并解读 P95
+- [ ] 知道 vLLM 关键 Prometheus 指标
+- [ ] 能按优先级列出调参顺序
+- [ ] 完成本课程全部 8 课自检项
+
+---
+
+## 课程完结
+
+恭喜完成 **vLLM 大模型推理与服务** 专课！回到 [`README.md`](README.md) 查看与 AI 路线的衔接。

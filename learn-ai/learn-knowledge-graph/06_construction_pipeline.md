@@ -1,0 +1,256 @@
+# 第6课：构建流水线 — ETL 自动化与增量更新
+
+> 前置：第 3–5 课  
+> 关联：[`10_deployment_and_operations.md`](10_deployment_and_operations.md) 调度与监控
+
+一次性脚本无法支撑生产图谱。本课设计**可调度、幂等、可观测**的构建流水线。
+
+---
+
+## 1. 流水线全景
+
+```
+┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
+│ Extract │ → │Transform│ → │  Load   │ → │ Quality │ → │ Publish │
+│ 抽取    │   │ 映射清洗 │   │ 写 Staging│  │ 校验    │   │ 正式图谱 │
+└─────────┘   └─────────┘   └─────────┘   └─────────┘   └─────────┘
+     ↑                                                              │
+     └──────────────── 增量水位线 / 调度触发 ─────────────────────────┘
+```
+
+| 阶段 | 输入 | 输出 | 失败策略 |
+|------|------|------|----------|
+| Extract | DB/API/文档 | Raw Records | 重试 3 次，告警 |
+| Transform | Raw | Canonical Nodes/Edges | 脏数据进 dead letter |
+| Load | Canonical | Staging Graph | 事务批次回滚 |
+| Quality | Staging | 校验报告 | 阻断 Publish |
+| Publish | 合格 Staging | Production Graph | 蓝绿 / 版本标记 |
+
+---
+
+## 2. 幂等写入：MERGE 模式
+
+**原则：** 同一 pipeline 重复运行，图谱状态一致。
+
+```cypher
+// 节点幂等
+MERGE (p:Person {id: $id})
+SET p += $props, p.updated_at = datetime()
+
+// 关系幂等（注意方向）
+MATCH (a:Person {id: $from_id}), (b:Project {id: $to_id})
+MERGE (a)-[r:WORKS_ON]->(b)
+SET r += $rel_props
+```
+
+### 删除同步（软删除 vs 硬删除）
+
+| 策略 | 实现 | 适用 |
+|------|------|------|
+| 软删除 | `SET n.status = 'deleted'` | 需审计、可恢复 |
+| 硬删除 | `DETACH DELETE` | 明确下线、GDPR |
+| 全量对比 | 源端 ID 集 vs 图谱 ID 集 diff | 中小规模 |
+
+```python
+def sync_deletions(source_ids: set[str], label: str, session):
+    session.run(f"""
+        MATCH (n:{label})
+        WHERE n.source = 'hr_db' AND NOT n.id IN $ids
+        SET n.status = 'inactive', n.updated_at = datetime()
+    """, ids=list(source_ids))
+```
+
+---
+
+## 3. 增量水位线（Watermark）
+
+```python
+# 元数据表（可用 PostgreSQL 或 Neo4j Meta 节点）
+# pipeline_state: { pipeline_id, last_success_at, last_watermark }
+
+def get_watermark(pipeline_id: str) -> datetime:
+    ...
+
+def run_incremental_sync():
+    wm = get_watermark("hr_employees")
+    rows = fetch_employees_updated_since(wm)
+    if not rows:
+        return
+    load_to_staging(rows)
+    if quality_gate_passed():
+        publish_to_production(rows)
+    set_watermark("hr_employees", max(r["updated_at"] for r in rows))
+```
+
+---
+
+## 4. 流水线编排
+
+### 4.1 轻量：Python + Cron
+
+```bash
+# crontab: 每天 2 点同步 HR
+0 2 * * * cd /app && python -m pipeline.run --job hr_sync
+```
+
+### 4.2 标准：Airflow DAG
+
+```python
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime
+
+with DAG("kg_hr_sync", start_date=datetime(2026, 1, 1), schedule="0 2 * * *") as dag:
+    extract = PythonOperator(task_id="extract", python_callable=extract_hr)
+    transform = PythonOperator(task_id="transform", python_callable=transform_hr)
+    load = PythonOperator(task_id="load", python_callable=load_staging)
+    quality = PythonOperator(task_id="quality", python_callable=run_quality_checks)
+    publish = PythonOperator(task_id="publish", python_callable=publish_prod)
+
+    extract >> transform >> load >> quality >> publish
+```
+
+### 4.3 文档抽取：事件驱动
+
+```
+新文档上传 S3/MinIO
+    → 消息队列 (Kafka/RabbitMQ)
+    → Worker: 解析 → 抽取 → Staging
+    → 人工复核（可选）→ Publish
+```
+
+---
+
+## 5. Publish 策略
+
+### 5.1 Staging → Production 提升
+
+```cypher
+// 审核通过的 Staging 节点写入正式 Label
+MATCH (s:Staging {status: 'approved'})
+WHERE s.label = 'Person'
+CALL apoc.create.addLabels(s, ['Person']) YIELD node
+REMOVE s:Staging
+SET s.status = 'published'
+```
+
+> 社区版无 APOC 时，用 `CREATE + DELETE` 或应用层复制。
+
+### 5.2 版本标记
+
+```cypher
+MATCH (n:Person)
+SET n.kg_version = '2026-03-01'
+```
+
+支持按版本回滚查询与对比。
+
+---
+
+## 6. 可观测性
+
+### 6.1 每次运行记录
+
+```python
+@dataclass
+class PipelineRun:
+    pipeline_id: str
+    started_at: datetime
+    finished_at: datetime | None
+    status: str  # success | failed | partial
+    records_in: int
+    records_written: int
+    records_rejected: int
+    error_message: str | None
+```
+
+### 6.2 关键指标
+
+| 指标 | 说明 | 告警阈值 |
+|------|------|----------|
+| `kg_pipeline_duration_seconds` | 运行耗时 | > SLA |
+| `kg_records_written_total` | 写入量 | 同比骤降 > 50% |
+| `kg_quality_reject_rate` | 拒绝率 | > 5% |
+| `kg_staging_pending_count` | 待审核积压 | > 1000 |
+
+---
+
+## 7. 完整示例：`practice/pipeline_demo.py`
+
+```python
+"""最小流水线：CSV → Transform → Neo4j MERGE"""
+
+import csv
+from pathlib import Path
+from neo4j import GraphDatabase
+
+NEO4J_URI = "bolt://localhost:7687"
+NEO4J_AUTH = ("neo4j", "changeme")
+
+def extract_csv(path: Path) -> list[dict]:
+    with path.open(encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+def transform(rows: list[dict]) -> tuple[list, list]:
+    nodes, edges = [], []
+    for row in rows:
+        pid = f"person_{row['employee_id']}"
+        did = f"dept_{row['dept_id']}"
+        nodes.append({"label": "Person", "id": pid, "props": {"name": row["name"], "source": "csv"}})
+        nodes.append({"label": "Department", "id": did, "props": {"name": row["dept_name"], "source": "csv"}})
+        edges.append({"type": "MEMBER_OF", "from": pid, "to": did})
+    return nodes, edges
+
+def load(driver, nodes, edges):
+    with driver.session() as s:
+        s.run("""
+            UNWIND $nodes AS n
+            CALL apoc.merge.node([n.label], {id: n.id}, n.props, n.props) YIELD node
+            RETURN count(*)
+        """, nodes=nodes)  # 无 APOC 时用 label 分支 MERGE
+        for label in set(n["label"] for n in nodes):
+            batch = [n for n in nodes if n["label"] == label]
+            s.run(f"""
+                UNWIND $batch AS n
+                MERGE (x:{label} {{id: n.id}})
+                SET x += n.props
+            """, batch=batch)
+        s.run("""
+            UNWIND $edges AS e
+            MATCH (a {id: e.from}), (b {id: e.to})
+            CALL apoc.merge.relationship(a, e.type, {}, {}, b) YIELD rel
+            RETURN count(*)
+        """, edges=edges)  # 简化：见 practice/pipeline_demo.py 完整版
+
+if __name__ == "__main__":
+    driver = GraphDatabase.driver(NEO4J_URI, auth=NEO4J_AUTH)
+    rows = extract_csv(Path("data/sample_employees.csv"))
+    nodes, edges = transform(rows)
+    load(driver, nodes, edges)
+    driver.close()
+```
+
+---
+
+## 8. 动手练习
+
+1. 运行 `python practice/pipeline_demo.py`，验证幂等（连跑两次节点数不变）
+2. 为流水线添加 `PipelineRun` 日志输出
+3. 设计一个 Airflow DAG 依赖图（3 个并行 Extract → 1 个 Publish）
+4. 实现 `updated_at` 水位线增量查询（伪代码即可）
+
+---
+
+## 9. 自检清单
+
+- [ ] 能画出 Extract → Publish 五阶段流水线
+- [ ] 理解 MERGE 幂等与删除同步策略
+- [ ] 知道水位线增量更新原理
+- [ ] 会选择 Cron vs Airflow 编排
+- [ ] 列出 3 个应监控的流水线指标
+
+---
+
+## 下一课
+
+[`07_quality_and_governance.md`](07_quality_and_governance.md) — 质量治理与团队协作

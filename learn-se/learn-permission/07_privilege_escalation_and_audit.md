@@ -1,0 +1,79 @@
+# 第7课：越权防护与审计：出事后可追溯
+
+## 1. 一句话解释
+
+越权是权限系统最常见的高危漏洞。防护要做到"接口层验身份、资源层验归属、租户层验隔离"，审计则保证任何操作都可追溯。
+
+## 2. 类比
+
+门禁卡刷开了 A 公司大门还不够，还要能刷开 A 公司财务室才算正常；每次刷卡都有记录（审计），出了问题才知道是谁。
+
+## 3. 越权类型
+
+| 类型 | 含义 | 示例 |
+|------|------|------|
+| 水平越权 | 同级别访问他人数据 | 把 URL 的 `id=1` 改成 `id=2` 看别人的订单 |
+| 垂直越权 | 低权限访问高权限功能 | 普通成员调用管理员的删除接口 |
+| IDOR | 直接对象引用未校验归属 | `/api/tasks/123` 直接返回未校验归属 |
+
+## 4. 防护层级
+
+```
+L1 认证中间件：必须登录
+L2 功能鉴权：require_permission("task:delete")
+L3 对象级校验：task.owner_id == user.id 或 task.tenant_id == user.tenant_id
+L4 数据范围：列表/导出接口统一 scope（第4课）
+L5 敏感操作复核：删除、导出、转账需二次确认并写审计
+```
+
+代码示例：
+
+```python
+@require_permission("task:update")
+def update_task(task_id, payload, user):
+    task = task_repo.get(task_id)
+    if task.tenant_id != user.tenant_id:
+        raise NotFound  # 返回 404 而非 403，避免泄露数据存在性
+    if not data_scope.allows(user, task):
+        raise Forbidden
+    task.update(payload)
+    audit.log(user=user, action="task:update", resource=f"task:{task_id}", result="allow")
+```
+
+## 5. 审计日志设计
+
+| 字段 | 内容 |
+|------|------|
+| who | user_id、tenant_id、IP、User-Agent |
+| what | action、resource、result（allow/deny） |
+| when | 时间戳 |
+| where | 服务名、接口路径 |
+| context | 请求 ID、变更前后值（可选） |
+
+要点：
+
+- 日志写追加、独立存储、定期归档，防篡改
+- **拒绝日志也要记**（deny 审计常用于风控和入侵检测）
+- 合规参考：GDPR（数据主体访问权）、等保（日志留存 6 个月以上）、企业内部审计
+
+## 6. 测试视角：越权用例清单
+
+- 换租户 Token 访问同 ID 资源
+- 普通角色调用管理员接口
+- 列表接口翻页越界取数
+- 导出接口绕开数据范围
+- 批量接口传入他人 ID 列表
+
+## 7. 动手练习
+
+为 `update_task` 写 3 个越权测试用例：
+
+1. 正常用户更新自己的任务 → 200
+2. 用户 A 更新用户 B 的任务（同一租户）→ 403 或 404
+3. 租户 A 的用户更新租户 B 的任务 → 404
+
+## 8. 自检清单
+
+- [ ] 能区分水平越权、垂直越权与 IDOR
+- [ ] 知道为什么越权场景返回 404 比 403 更安全
+- [ ] 能为关键操作设计审计日志并考虑防篡改

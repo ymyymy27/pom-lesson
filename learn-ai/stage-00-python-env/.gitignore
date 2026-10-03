@@ -1,0 +1,33 @@
+# 虚拟环境
+.venv/
+venv/
+env/
+*.venv/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 依赖文件（仅示例，实际项目中使用）
+# requirements.txt
+# !requirements.txt  # 通常保留

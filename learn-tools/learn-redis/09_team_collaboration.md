@@ -1,0 +1,434 @@
+# 第9课：团队协作规范与 Key 治理
+
+> 前置：第 7 课（隔离策略）· 第 8 课（多环境部署）· 第 4 课（Key 设计）  
+> 关联：[`10_production_operations.md`](10_production_operations.md) 生产运维
+
+当 Redis 从「一个人本地练习」变成「团队共用实例 / 多服务共用 / 多人联调」，**80% 的问题不是命令不会用，而是命名冲突、环境混连、误删数据、文档缺失**。
+
+本课给出可落地的团队规范模板。
+
+---
+
+## 1. 协作场景与典型痛点
+
+### 1.1 你会遇到的场景
+
+```
+场景 A：5 个后端共用公司一台 dev Redis
+场景 B：Web + Celery + 定时任务 共用一个 prod 实例
+场景 C：你本地连 localhost:6379，同事也连同一台（端口映射到共享服务器）
+场景 D：Dify、learn-redis、业务项目 同时跑在你 laptop 上
+场景 E：新人 FLUSHALL 清库，全员 Session 失效
+```
+
+### 1.2 痛点对照表
+
+| 痛点 | 根因 | 本课对策 |
+|------|------|----------|
+| SET 了 GET 不到 | 连错实例 / 错 db / 错前缀 | §3 连接规范 + §4 Key 规范 |
+| key 被覆盖 | 无前缀或前缀冲突 | §4 命名规范 |
+| 误删他人数据 | 共用实例 + FLUSH | §2 环境隔离 + §7 权限 |
+| 不知道 key 谁写的 | 无文档 | §5 Key 注册表 |
+| Celery 任务消失 | FLUSHDB 清错 db | §6 框架共存 |
+| 排查困难 | KEYS * 滥用 | §8 安全排查命令 |
+
+---
+
+## 2. 团队隔离的第一原则
+
+```
+优先级（从高到低）：
+
+1. 不同环境 → 不同 Redis 实例
+   dev / staging / prod 绝不共用
+
+2. 同一环境内不同项目 → 不同实例 或 强前缀
+   myapp vs otherapp
+
+3. 同一项目内不同模块 → Key 前缀
+   myapp:cache:* vs myapp:session:*
+
+4. 框架默认分库（可选）→ 逻辑库 /1 /2
+   Celery broker / result
+
+5. 同一 db 内 → 绝不用「裸 key」
+   ❌ article:42
+   ✅ dev:myapp:cache:article:42
+```
+
+---
+
+## 3. 连接配置规范
+
+### 3.1 统一用环境变量
+
+**禁止**在代码中硬编码 host、password、db 编号。
+
+```python
+# config/redis.py
+import os
+
+REDIS_URL = os.environ["REDIS_URL"]
+REDIS_KEY_PREFIX = os.environ.get("REDIS_KEY_PREFIX", "myapp")
+
+def redis_client():
+    import redis
+    return redis.from_url(REDIS_URL, decode_responses=True)
+```
+
+### 3.2 `.env.example`（提交 Git）
+
+```bash
+# ── Redis ──
+REDIS_URL=redis://localhost:6379/0
+REDIS_KEY_PREFIX=dev:yourname:myapp
+
+# Celery（若使用）
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
+# ── 应用 ──
+APP_ENV=development
+```
+
+### 3.3 个人 `.env`（gitignore）
+
+```bash
+REDIS_KEY_PREFIX=dev:zhangsan:myapp
+```
+
+**共用 dev 服务器时：** 每人 `REDIS_KEY_PREFIX` 必须含**开发者标识**，避免 key 冲突：
+
+```
+dev:zhangsan:myapp:cache:article:42
+dev:lisi:myapp:cache:article:42
+```
+
+### 3.4 连接自检脚本
+
+团队可放在 `scripts/check_redis.py`：
+
+```python
+"""部署前自检：实例、db、前缀是否正确"""
+import os
+import sys
+import redis
+
+url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+prefix = os.environ.get("REDIS_KEY_PREFIX", "myapp")
+env = os.environ.get("APP_ENV", "unknown")
+
+r = redis.from_url(url, decode_responses=True)
+
+print(f"APP_ENV={env}")
+print(f"REDIS_URL={url.split('@')[-1]}")  # 不打印密码
+print(f"REDIS_KEY_PREFIX={prefix}")
+print(f"PING={r.ping()}")
+
+test_key = f"{prefix}:__connectivity_test__"
+r.setex(test_key, 10, "ok")
+assert r.get(test_key) == "ok"
+r.delete(test_key)
+print("Connectivity test: OK")
+```
+
+---
+
+## 4. Key 命名规范（团队版）
+
+### 4.1 完整模板
+
+```
+{env}:{app}:{module}:{entity}:{id}[:{subfield}]
+```
+
+| 段 | 必填 | 示例 | 说明 |
+|----|------|------|------|
+| env |  dev/staging 建议有 | `dev` `staging` | prod 可省略以省内存 |
+| app | ✅ | `myapp` `taskflow` | 项目名 |
+| module | ✅ | `cache` `session` `lock` `ratelimit` | 功能模块 |
+| entity | ✅ | `article` `user` `order` | 实体类型 |
+| id | 多数情况 | `42` `550e8400-...` | 业务 ID |
+| subfield | 可选 | `daily` `page:1` | 细分 |
+
+### 4.2 各模块标准前缀
+
+| 模块 | 前缀模式 | TTL 建议 | 数据结构 |
+|------|----------|----------|----------|
+| 缓存 | `{p}:cache:{entity}:{id}` | 5–30 min | String (JSON) |
+| 空值占位 | `{p}:cache:{entity}:{id}:nil` | 60 s | String |
+| Session | `{p}:session:{session_id}` | 24 h | String (JSON) |
+| 限流 | `{p}:ratelimit:{scope}:{id}` | = window | String / ZSet |
+| 分布式锁 | `{p}:lock:{resource}:{id}` | 10–30 s | String |
+| 验证码 | `{p}:otp:{phone}` | 5 min | String |
+| 排行榜 | `{p}:rank:{board}:{period}` | 永久/长 TTL | ZSet |
+
+`{p}` = `REDIS_KEY_PREFIX`，如 `dev:zhangsan:myapp`。
+
+### 4.3 禁止事项
+
+```
+❌ 无前缀：article:42
+❌ 过于笼统：cache:1
+❌ 含空格或换行
+❌ 超长 key（> 256 字符需评审）
+❌ 把 PII 明文放 key 名：user:phone:13800138000（应 hash）
+❌ 不同模块共用同一 prefix 却无 entity 段
+```
+
+### 4.4 列表 / 分页 key
+
+```
+dev:myapp:cache:article:list:page:1:size:20:sort:created_desc
+dev:myapp:cache:user:7:articles:page:2
+```
+
+**失效策略：** 创建/更新文章时，除了删详情 key，还要考虑删相关列表 key（或短 TTL + 接受短暂不一致）。
+
+---
+
+## 5. Key 注册表（团队文档）
+
+在仓库 `docs/redis-keys.md` 维护，Code Review 时对照：
+
+```markdown
+# Redis Key 注册表 — myapp
+
+## 实例
+- dev:     redis://dev-redis.internal:6379/0
+- staging: redis://staging-redis.internal:6379/0
+- prod:    redis://prod-redis.internal:6379/0
+
+## DB 分配
+| DB | 用途 |
+|----|------|
+| 0 | 业务（cache/session/ratelimit/lock） |
+| 1 | Celery broker |
+| 2 | Celery result |
+
+## Key 清单
+| Pattern | 类型 | TTL | 写入方 | 说明 |
+|---------|------|-----|--------|------|
+| `{p}:cache:article:{id}` | String | 300s | api/articles | 文章详情 JSON |
+| `{p}:session:{sid}` | String | 86400s | api/auth | Session 数据 |
+| `{p}:ratelimit:ip:{ip}:{path}` | ZSet | 60s | middleware | 滑动窗口限流 |
+| `{p}:lock:order:{id}` | String | 30s | order service | 下单锁 |
+
+## 变更流程
+1. 新增 key pattern → 更新本表 → PR review
+2. 修改 TTL → 注明原因与影响
+3. 禁止未注册的 `FLUSH*` 操作
+```
+
+---
+
+## 6. 多服务 / 框架共存
+
+### 6.1 Web + Celery 共存
+
+```
+redis://host:6379/0   ← FastAPI/Django（cache, session）
+redis://host:6379/1   ← Celery broker
+redis://host:6379/2   ← Celery result backend
+```
+
+**文档必须写清：** 「db1/db2 归 Celery 管，禁止手动 FLUSHDB」。
+
+### 6.2 同 db 多服务（微服务）
+
+若所有服务共 db0，则**必须**统一 prefix：
+
+```
+# 订单服务
+myapp:order:cache:...
+
+# 用户服务
+myapp:user:cache:...
+```
+
+各服务只读写自己的 module 段；跨服务通过 API，不直接读对方 key（除非明确约定共享缓存）。
+
+### 6.3 与第三方 stack 共存（如 Dify）
+
+你 laptop 上可能同时有：
+
+| 容器 | 端口 | 建议 |
+|------|------|------|
+| learn-redis | 6379 | 课程专用 |
+| dify redis | 9787 等 | 勿与课程混连 |
+
+**规范：** 每个 compose 项目独立；`.env` 里 `REDIS_URL` 写全 host:port；README 注明默认端口。
+
+---
+
+## 7. 权限与误操作防护
+
+### 7.1 开发环境
+
+- 共用 dev Redis：每人独立 `REDIS_KEY_PREFIX`
+- 禁止 `FLUSHALL`；`FLUSHDB` 仅允许在个人 prefix 下用 `SCAN` + `DEL` 清理自己的 key
+- 提供清理脚本，只删自己的 prefix：
+
+```python
+def cleanup_my_keys(r, prefix: str) -> int:
+    """只删除指定前缀的 key — 开发环境用"""
+    deleted = 0
+    cursor = 0
+    while True:
+        cursor, keys = r.scan(cursor, match=f"{prefix}:*", count=100)
+        if keys:
+            deleted += r.delete(*keys)
+        if cursor == 0:
+            break
+    return deleted
+```
+
+### 7.2 生产环境
+
+- ACL：应用账号禁止 `+flushall` `+flushdb` `+config` `+debug`
+- 变更走工单；备份后再做危险操作
+- 删 key 用精确 `DEL` 或带 prefix 的脚本，不用 `FLUSH`
+
+### 7.3 Code Review Checklist（Redis 相关）
+
+- [ ] 新 key 是否遵循命名规范？
+- [ ] 是否更新了 `docs/redis-keys.md`？
+- [ ] TTL 是否合理？有无永久 key？
+- [ ] 是否使用 `KEYS *`？（应改为 `SCAN`）
+- [ ] 连接是否来自环境变量？
+- [ ] 大数据是否拆 key？（避免单 key 几 MB）
+
+---
+
+## 8. 排查与协作调试
+
+### 8.1 安全遍历 key
+
+```bash
+# ❌ 生产禁止
+KEYS myapp:*
+
+# ✅ 使用 SCAN
+redis-cli --scan --pattern 'dev:myapp:cache:*' | head -20
+```
+
+```python
+def scan_keys(r, pattern: str, limit: int = 100):
+    out, cursor = [], 0
+    while len(out) < limit:
+        cursor, keys = r.scan(cursor, match=pattern, count=100)
+        out.extend(keys)
+        if cursor == 0:
+            break
+    return out[:limit]
+```
+
+### 8.2 跨同事排查协议
+
+当 A 说「我写了 key 但 B 读不到」：
+
+```
+1. 双方打印 REDIS_URL（脱敏）是否同一 host:port/db
+2. 双方打印 REDIS_KEY_PREFIX 是否一致（若应一致）
+3. A 提供完整 key 名，B 用 GET 精确查询
+4. TTL key — 是否已过期？
+5. TYPE key — 是否类型不对（Hash vs String）？
+6. MONITOR（仅 dev，短时间）看谁 DEL 了 key
+```
+
+### 8.3 临时共享调试 key
+
+```bash
+# 约定 debug 命名空间，24h 自动过期
+SETEX dev:debug:zhangsan:test:1 86400 "hello"
+```
+
+---
+
+## 9. Git 与 CI 协作
+
+### 9.1 仓库内应提交的文件
+
+```
+.env.example
+docs/redis-keys.md
+docs/redis-db-allocation.md
+scripts/check_redis.py
+practice/docker-compose.yml
+```
+
+### 9.2 不应提交
+
+```
+.env
+*.rdb / *.aof
+含真实密码的配置
+```
+
+### 9.3 CI 中使用 Redis
+
+```yaml
+# GitHub Actions 示例
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+
+env:
+  REDIS_URL: redis://localhost:6379/0
+  REDIS_KEY_PREFIX: ci:myapp
+```
+
+CI 使用独立容器，与 dev/prod 完全隔离；测试结束容器销毁，无残留 key。
+
+---
+
+## 10. 改造 practice 项目（示例）
+
+### 10.1 CacheService 支持环境前缀
+
+```python
+# cache_service.py
+import os
+
+class CacheService:
+    def __init__(self, client, prefix: str | None = None, default_ttl: int = 3600):
+        base = os.getenv("REDIS_KEY_PREFIX", "myapp")
+        module = prefix or "cache"
+        self.prefix = f"{base}:{module}"
+        ...
+```
+
+### 10.2 main.py 连接
+
+```python
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+cache = CacheService(redis_client)  # 自动 dev:yourname:myapp:cache:...
+```
+
+---
+
+## 11. 练习
+
+1. 创建 `docs/redis-keys.md`，为你学过的 practice API 注册所有 key pattern
+2. 设置 `REDIS_KEY_PREFIX=dev:你的名字:myapp`，启动应用，用 `SCAN` 验证 key 格式
+3. 实现 `cleanup_my_keys()`，只删除自己 prefix 下的 key
+4. 模拟「连错 db」：应用连 `/0`，CLI 在 `/1` 查同一 key，记录排查步骤
+5. 写 Code Review 时 Redis 相关的 5 条检查项（可基于 §7.3 扩展）
+
+---
+
+## 12. 本课 Checklist
+
+- [ ] 团队有 `.env.example` 和 Key 注册表文档
+- [ ] 共用 dev 时每人有独立 `REDIS_KEY_PREFIX`
+- [ ] 禁止裸 key 和无文档的新 pattern
+- [ ] 知道 Web + Celery 的 db 分工
+- [ ] 会用 `SCAN` 替代 `KEYS *`
+- [ ] 有连接自检脚本或 onboarding 步骤
+
+---
+
+👉 下一课：[10_production_operations.md](10_production_operations.md) — 生产运维、高可用与故障处理

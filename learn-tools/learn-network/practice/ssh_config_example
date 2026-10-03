@@ -1,0 +1,23 @@
+# 示例：~/.ssh/config
+# 使用前把占位符换成你的真实信息，并确认文件权限（Windows 不限，Linux 建议 600）
+
+# 公网跳板机
+Host bastion
+    HostName jump.example.com
+    User dev
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 30
+
+# 经跳板机进入内网开发机
+Host devbox
+    HostName 10.20.30.50
+    User dev
+    ProxyJump bastion
+    ServerAliveInterval 30
+
+# 自动建立数据库隧道：ssh db-tunnel 后本地 5432 直达内网数据库
+Host db-tunnel
+    HostName jump.example.com
+    User dev
+    LocalForward 5432 db.internal:5432
+    ServerAliveInterval 30

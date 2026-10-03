@@ -1,0 +1,12 @@
+function greet(name, age) {
+    const message = "Hello, World!";
+    return message;
+}
+
+const arr = [1, 2, 3, 4, 5];
+
+function calculate(a, b) {
+    return a + b;
+}
+
+console.log("Welcome to Neovim");

@@ -1,0 +1,4 @@
+Hello Neovim!
+This is my first file.
+
+（用 Neovim 打开此文件，按步骤练习第1课的内容）

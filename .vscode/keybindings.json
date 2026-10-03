@@ -1,0 +1,7 @@
+[
+  {
+    "key": "shift+space",
+    "command": "python.execInTerminal",
+    "when": "editorLangId == 'python'"
+  }
+]

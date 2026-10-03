@@ -1,0 +1,256 @@
+# 第2课：分支管理与合并
+
+## 1. 分支是什么？
+
+### 一句话解释
+**分支就是平行宇宙** —— 你可以在不影响主线的情况下，开一条分支去尝试新功能。
+
+### 为什么需要分支？
+
+没有分支：
+```
+小明在改登录功能 → 代码半成品 → 线上出bug → 没法修，因为代码是半成品
+```
+
+有分支：
+```
+main（稳定版） ─────────────────────→ 修复bug → 上线
+                 \                  /
+                  feature/login ──→  （登录功能在独立分支开发）
+```
+
+---
+
+## 2. 分支基本操作
+
+### 2.1 查看分支
+
+```bash
+git branch              # 查看本地分支（* 表示当前分支）
+git branch -a           # 查看所有分支（包括远程）
+git branch -v           # 查看各分支最新提交
+```
+
+输出示例：
+```
+* main                  ← 当前在 main 分支
+  feature/login
+  fix/bug-123
+```
+
+### 2.2 创建分支
+
+```bash
+git branch 分支名              # 创建分支（不切换）
+git checkout -b 分支名         # 创建并切换（老写法）
+git switch -c 分支名           # 创建并切换（新写法，推荐）
+```
+
+**分支命名规范：**
+```
+feature/登录功能     功能分支
+fix/修复描述         修复分支
+hotfix/紧急修复      热修复
+refactor/重构描述    重构分支
+```
+
+### 2.3 切换分支
+
+```bash
+git checkout 分支名     # 老写法
+git switch 分支名       # 新写法（推荐）
+```
+
+**注意：** 切换前确保当前分支的改动已提交或暂存，否则会报错。
+
+### 2.4 删除分支
+
+```bash
+git branch -d 分支名     # 删除已合并的分支
+git branch -D 分支名     # 强制删除（未合并也删）
+```
+
+---
+
+## 3. 合并分支
+
+### 3.1 基本合并（merge）
+
+```bash
+# 场景：把 feature/login 合并到 main
+
+# 1. 先切换到目标分支（main）
+git switch main
+
+# 2. 合并
+git merge feature/login
+
+# 3. 删除已合并的分支（可选）
+git branch -d feature/login
+```
+
+### 3.2 合并类型
+
+**快进合并（Fast-forward）：**
+```
+合并前：
+main:    A → B
+              \
+feature:       C → D
+
+合并后：
+main:    A → B → C → D     ← 指针直接前移，不产生新提交
+```
+
+**三方合并（3-way merge）：**
+```
+合并前：
+main:    A → B → E          ← main 也有新提交
+              \
+feature:       C → D
+
+合并后：
+main:    A → B → E → M      ← M 是合并提交
+              \       /
+               C → D
+```
+
+---
+
+## 4. 解决冲突
+
+### 什么时候会冲突？
+
+两个分支修改了**同一个文件的同一行**，Git 不知道保留哪个。
+
+### 冲突长什么样？
+
+```python
+def hello():
+<<<<<<< HEAD
+    print("Hello from main")
+=======
+    print("Hello from feature")
+>>>>>>> feature/login
+```
+
+含义：
+- `<<<<<<< HEAD` 到 `=======`：当前分支（main）的内容
+- `=======` 到 `>>>>>>>` ：要合并进来的分支（feature）的内容
+
+### 解决步骤
+
+```bash
+# 1. 合并时发现冲突
+git merge feature/login
+# CONFLICT (content): Merge conflict in app.py
+
+# 2. 打开冲突文件，手动编辑，选择保留哪个（或两个都保留）
+# 编辑后：
+def hello():
+    print("Hello from main and feature")
+
+# 3. 标记冲突已解决
+git add app.py
+
+# 4. 完成合并
+git commit -m "合并 feature/login，解决冲突"
+```
+
+### 预防冲突的好习惯
+
+- ✅ 经常从 main 拉取最新代码到你的分支
+- ✅ 小步提交，不要积累大量改动
+- ✅ 团队沟通，避免多人改同一个文件
+- ✅ 合并前先在本地测试
+
+```bash
+# 在你的功能分支上，定期同步 main 的更新
+git switch feature/login
+git merge main              # 把 main 的最新改动合进来
+```
+
+---
+
+## 5. 实际场景演练
+
+```bash
+# === 场景：开发登录功能 ===
+
+# 1. 从 main 创建功能分支
+git switch main
+git switch -c feature/login
+
+# 2. 开发...提交...
+echo "def login(): pass" > login.py
+git add . && git commit -m "添加登录函数骨架"
+
+echo "def validate(): pass" >> login.py
+git add . && git commit -m "添加表单验证"
+
+# 3. 开发完成，合并回 main
+git switch main
+git merge feature/login
+
+# 4. 删除功能分支
+git branch -d feature/login
+
+# 5. 查看历史
+git log --oneline --graph
+```
+
+```bash
+# === 场景：紧急修复线上 bug ===
+
+# 你正在开发新功能...
+git switch feature/new-ui
+
+# 突然线上有 bug！
+# 1. 先保存当前工作
+git stash
+
+# 2. 切回 main，创建热修复分支
+git switch main
+git switch -c hotfix/fix-crash
+
+# 3. 修复 bug
+# ... 修改代码 ...
+git add . && git commit -m "修复首页崩溃问题"
+
+# 4. 合并到 main 并上线
+git switch main
+git merge hotfix/fix-crash
+git branch -d hotfix/fix-crash
+
+# 5. 回到功能分支继续开发
+git switch feature/new-ui
+git stash pop              # 恢复之前的工作
+```
+
+---
+
+## 6. 动手练习
+
+1. 创建 `feature/greeting` 分支，在里面添加 `greet.py`
+2. 切回 `main`，在 `main` 上也修改一个文件
+3. 合并 `feature/greeting` 到 `main`
+4. 故意制造一次冲突（两个分支改同一行），练习解决冲突
+5. 用 `git log --oneline --graph` 查看合并历史
+
+---
+
+## 7. 小结
+
+| 命令 | 作用 |
+|------|------|
+| `git branch` | 查看分支 |
+| `git switch -c 分支名` | 创建并切换分支 |
+| `git switch 分支名` | 切换分支 |
+| `git merge 分支名` | 合并分支到当前分支 |
+| `git branch -d 分支名` | 删除分支 |
+
+**核心流程：** `创建分支 → 开发 → 提交 → 切回main → 合并 → 删分支`
+
+---
+
+**下一课：** `03_remote_collaboration.md` - 远程仓库与协作

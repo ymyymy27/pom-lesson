@@ -1,0 +1,98 @@
+# 第 9 课：帮助系统与折叠
+
+> 目标：学会使用内置帮助，以及代码折叠操作
+
+## 9.1 帮助系统
+
+Neovim 自带完整的文档，**学会查文档是最重要的技能**。
+
+```vim
+:help {topic}         " 查看主题帮助
+:helpgrep {pattern}   " 在帮助中搜索
+```
+
+### 常用帮助主题
+
+```vim
+:help usr_01.txt      " 用户手册第 1 章
+:help user-manual     " 用户手册目录
+:help motion.txt      " 移动命令帮助
+:help operator        " 操作符帮助
+:help index           " 所有按键索引
+:help ins-completion  " 插入模式补全
+:help options         " 所有选项
+:help {key}           " 查某个按键（如 :help i_Ctrl_y）
+```
+
+### 帮助中的导航
+
+```vim
+Ctrl+]               " 跳转到链接（光标在 |topic| 上）
+Ctrl+t               " 返回上一个位置（tag）
+:helpclose            " 关闭帮助窗口
+```
+
+### 示例
+
+```vim
+:help dw              " 查看 dw 命令的帮助
+:help 'hlsearch'      " 查看选项（注意加引号）
+:help :s              " 查看 :s 命令
+:help modifier-alt    " 查看 Alt 键
+```
+
+## 9.2 折叠
+
+折叠（fold）= 把一段代码收起来，只显示第一行。
+
+### 折叠命令
+
+```vim
+zf                  " 创建折叠（配合移动，如 zfap = 折叠一个段落）
+zfa{                " 折叠花括号内的内容
+zf%                 " 折叠匹配括号内的内容
+zo                  " 打开当前折叠（open）
+zc                  " 关闭当前折叠（close）
+zO                  " 递归打开所有折叠
+zC                  " 递归关闭所有折叠
+zM                  " 关闭所有折叠（fold more = 全部收拢）
+zR                  " 打开所有折叠（reduce = 全部展开）
+za                  " 切换当前折叠（toggle）
+zm                  " 关闭更多折叠（fold more）
+zr                  " 打开更多折叠（reduce）
+zn                  " 禁用折叠（no fold）
+zN                  " 恢复折叠
+zi                  " 切换折叠开关
+```
+
+### 折叠方式（foldmethod）
+
+```vim
+set foldmethod=manual    " 手动创建
+set foldmethod=marker    " 用标记（如 {{{ 和 }}}）折叠
+set foldmethod=indent    " 按缩进折叠
+set foldmethod=syntax    " 按语法折叠
+set foldmethod=diff     " diff 模式专用
+```
+
+### 折叠相关选项
+
+```vim
+set foldlevel=20        " 打开时自动展开的程度
+set foldcolumn=3        " 在侧边显示折叠状态列
+```
+
+## 9.3 练习任务
+
+1. 用 `:help usr_01.txt` 打开用户手册第一章
+2. 用 `:helpgrep cursor` 在帮助中搜索 cursor 相关内容
+3. 对一段代码使用 `zf` 折叠，然后 `zo` 打开
+4. 试试 `zM` 全部折叠，`zR` 全部展开
+5. 设置 `set foldmethod=indent`，观察效果
+
+## 9.4 进度检查
+
+- [ ] 知道 `:help` 可以查任何帮助
+- [ ] 能在帮助中用 `Ctrl+]` 跳转
+- [ ] 能用 `zf zc` 创建和关闭折叠
+- [ ] 能用 `zM zR` 全部折叠/展开

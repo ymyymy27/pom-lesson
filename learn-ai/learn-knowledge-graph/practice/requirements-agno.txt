@@ -1,0 +1,7 @@
+# 第 11 课 Agno 接入（在 requirements.txt 基础上追加安装）
+agno>=2.0.0
+openai>=1.50.0
+neo4j>=5.26.0
+python-dotenv>=1.0.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0

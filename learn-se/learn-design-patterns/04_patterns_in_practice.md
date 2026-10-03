@@ -1,0 +1,446 @@
+# 第4课：模式实战、组合与反模式
+
+## 1. 模式组合
+
+真实系统中，模式很少单独出现，通常**组合使用**。
+
+### 示例：Web 框架请求处理
+
+```
+HTTP Request
+    ↓
+[责任链] 中间件：CORS → Auth → RateLimit
+    ↓
+[策略] 路由匹配策略
+    ↓
+[工厂方法] 创建 Controller
+    ↓
+[模板方法] Controller.handle(): validate → process → render
+    ↓
+[观察者] 事件：order.created → 发邮件、更新库存
+    ↓
+HTTP Response
+```
+
+### 示例：游戏引擎
+
+```
+[单例] GameManager
+[工厂方法] 创建 Enemy 类型
+[对象池/享元] 粒子系统
+[状态] 角色：Idle → Run → Attack → Die
+[命令] 输入 → 命令队列 → 撤销
+[观察者] 血量变化 → UI 更新
+[组合] 场景树：Node → Sprite / Group
+```
+
+---
+
+## 2. 从问题到模式的实战流程
+
+```
+1. 描述问题（不含模式名）
+   「支付方式会不断增加，不想改 checkout 函数」
+
+2. 识别变化点
+   「变化的是支付算法，不变的是 checkout 流程」
+
+3. 匹配模式
+   → 策略模式（算法可互换）
+   → 或工厂方法（创建不同 PaymentProcessor）
+
+4. 最小实现
+   先 2 种支付方式 + 1 个 Context，验证结构
+
+5. 评估
+   是否比 if/elif 更清晰？团队能否理解？
+```
+
+---
+
+## 3. 综合实战：通知系统
+
+需求：支持多种通知渠道（邮件、短信、推送），可动态组合，支持日志和重试。
+
+```python
+from abc import ABC, abstractmethod
+
+# 策略 — 通知渠道
+class Notifier(ABC):
+    @abstractmethod
+    def send(self, message: str, recipient: str) -> bool: ...
+
+class EmailNotifier(Notifier):
+    def send(self, message, recipient):
+        print(f"Email to {recipient}: {message}")
+        return True
+
+class SMSNotifier(Notifier):
+    def send(self, message, recipient):
+        print(f"SMS to {recipient}: {message}")
+        return True
+
+# 装饰器 — 叠加日志
+class LoggingNotifier(Notifier):
+    def __init__(self, notifier: Notifier):
+        self._notifier = notifier
+
+    def send(self, message, recipient):
+        print(f"[LOG] Sending to {recipient}")
+        result = self._notifier.send(message, recipient)
+        print(f"[LOG] Result: {result}")
+        return result
+
+# 装饰器 — 叠加重试
+class RetryNotifier(Notifier):
+    def __init__(self, notifier: Notifier, max_retries=3):
+        self._notifier = notifier
+        self.max_retries = max_retries
+
+    def send(self, message, recipient):
+        for attempt in range(self.max_retries):
+            if self._notifier.send(message, recipient):
+                return True
+            print(f"[RETRY] Attempt {attempt + 1} failed")
+        return False
+
+# 组合 — 同时发多个渠道
+class CompositeNotifier(Notifier):
+    def __init__(self, notifiers: list[Notifier]):
+        self.notifiers = notifiers
+
+    def send(self, message, recipient):
+        return all(n.send(message, recipient) for n in self.notifiers)
+
+# 外观 — 简化调用
+class NotificationService:
+    def __init__(self):
+        email = RetryNotifier(LoggingNotifier(EmailNotifier()))
+        sms = LoggingNotifier(SMSNotifier())
+        self.notifier = CompositeNotifier([email, sms])
+
+    def notify_user(self, user_id: str, message: str):
+        return self.notifier.send(message, user_id)
+
+# 使用
+service = NotificationService()
+service.notify_user("user_123", "Your order has shipped")
+```
+
+**涉及模式：** 策略 + 装饰器 + 组合 + 外观
+
+---
+
+## 4. 反模式（Anti-Patterns）
+
+反模式是**看似合理但会带来问题的常见做法**。
+
+### 4.1 金锤子（Golden Hammer）
+
+> 手里有锤子，看什么都是钉子。
+
+```
+症状：所有地方都用单例
+      两个分支也用策略模式
+      简单 CRUD 搞六边形架构
+```
+
+**解药：** Rule of Three，YAGNI，从简单开始。
+
+### 4.2 上帝类（God Object）
+
+```python
+class Application:
+    def handle_request(self): ...
+    def connect_db(self): ...
+    def send_email(self): ...
+    def render_template(self): ...
+    def calculate_tax(self): ...
+    # 3000 行...
+```
+
+**解药：** SRP，提取类，分层架构。
+
+### 4.3 面条代码（Spaghetti Code）
+
+```
+goto 式跳转、全局变量满天飞、无模块边界
+```
+
+**解药：** 结构化编程、函数提取、分层。
+
+### 4.4 复制粘贴编程（Copy-Paste Programming）
+
+```
+三处相同的验证逻辑，改一处漏两处
+```
+
+**解药：** DRY，提取公共函数/模块。
+
+### 4.5 过度工程（Over-Engineering）
+
+```
+需求：做一个 Todo List
+实现：微服务 + 事件溯源 + CQRS + 抽象工厂创建 Todo
+```
+
+**解药：** 匹配问题规模，MVP 思维。
+
+### 4.6 模式滥用对照表
+
+| 过度设计 | 合适做法 |
+|---------|---------|
+| 全局单例 Config | 模块级变量或 DI |
+| 抽象工厂创建 2 种 Logger | 简单工厂或 dict |
+| 观察者通知 1 个 listener | 直接函数调用 |
+| 建造者构建 3 参数对象 | dataclass + 默认值 |
+| 6 层装饰器包装 | 2-3 层，或 AOP 框架 |
+
+---
+
+## 5. 模式评审清单
+
+引入一个模式前，问自己：
+
+- [ ] **问题真实吗？** 不是假想未来需求
+- [ ] **更简单的方法不够吗？** 函数/字典/if 能否解决
+- [ ] **变化点明确吗？** 能指出「什么在变、什么不变」
+- [ ] **团队理解吗？** 其他人能读懂
+- [ ] **测试更好写吗？** 模式应降低耦合
+- [ ] **删除代价可接受吗？** 如果过度，能轻松回退
+
+---
+
+## 6. 现代语言特性 vs 经典模式
+
+很多 GoF 模式在现代语言中已有更简洁替代：
+
+| 模式 | 现代替代 |
+|------|---------|
+| 单例 | DI 容器、模块作用域 |
+| 策略 | 一等函数、lambda |
+| 命令 | 闭包 |
+| 迭代器 | `for...in`、生成器 |
+| 装饰器 | `@decorator`、AOP 框架 |
+| 观察者 | EventEmitter、Signals |
+| 建造者 | Named parameters、Builder DSL |
+| 空对象 | Optional、None 对象 |
+
+**结论：** 理解模式的**意图**比死记结构更重要。语言特性是模式的语法糖，思想不变。
+
+---
+
+## 7. 动手练习
+
+### 练习 1：重构识别
+
+以下代码有哪些问题？建议用什么模式或重构？
+
+```python
+class App:
+    _instance = None
+    def __new__(cls):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def export(self, fmt, data):
+        if fmt == "pdf":
+            # 200 lines PDF logic
+            ...
+        elif fmt == "csv":
+            # 150 lines CSV logic
+            ...
+        elif fmt == "json":
+            # 100 lines JSON logic
+            ...
+        self.log(f"Exported {fmt}")
+        self.send_email(f"Export {fmt} done")
+```
+
+<details>
+<summary>参考答案</summary>
+
+1. 单例 + 多职责 → 拆分，用 DI
+2. if/elif 导出 → 策略模式或工厂方法
+3. 日志/邮件耦合 → 观察者或独立 Notifier
+4. 200 行分支 → 提取类，每个 Exporter 一个文件
+
+</details>
+
+### 练习 2：设计一个插件系统
+
+要求：
+- 支持动态注册插件
+- 插件有统一接口
+- 支持插件链（前置/后置处理）
+
+提示：工厂 + 策略 + 责任链
+
+---
+
+## 8. 自检清单
+
+- [ ] 能举例说明 2 个以上模式的组合使用
+- [ ] 能识别至少 4 种反模式
+- [ ] 理解「模式意图 > 模式结构」
+- [ ] 知道现代语言特性如何简化经典模式
+- [ ] 能在引入模式前完成评审清单
+
+---
+
+## 9. 模块总结
+
+```
+learn-design-patterns 学习路径回顾：
+
+00 全景图 → 知道有哪些模式、怎么选
+01 创建型 → 对象怎么来
+02 结构型 → 对象怎么组
+03 行为型 → 对象怎么协作
+04 实战   → 组合、反模式、现代替代
+
+下一步 → learn-architecture/（从类/模块到系统）
+```
+
+---
+
+## 10. 延伸阅读
+
+- 《Refactoring to Patterns》— Joshua Kriege
+- sourcemaking.com/design_patterns — 模式与反模式
+- 下一模块：`learn-architecture/00_architecture_overview.md`
+
+---
+
+# 深化篇：从模式到架构
+
+> 前面讲了"单个模式怎么用"；这一篇讲"模式怎么组合成系统"、
+> "什么时候模式是负担"，以及"AI 开发里模式长什么样"。
+
+## 1. 模式组合的深层逻辑：先问职责，再选模式
+
+真实系统里模式像积木，但组合不是堆叠，而是**每个模式负责一个变化点**：
+
+```python
+# 一个 LLM 调用管线，每个模式各管一件事
+model = RetryDecorator(            # 结构型：增强（重试）
+    CacheDecorator(                # 结构型：增强（缓存）
+        make_model("openai")       # 创建型：工厂（造哪个）
+    )
+)
+agent = Agent(                     # 行为型：模板方法（主循环）
+    strategy=EngineerPrompt(),     # 行为型：策略（提示词）
+    callbacks=[Logger(), Stats()]  # 行为型：观察者（广播）
+)
+```
+
+组合时的心法：**一个模式解决一个问题，别让一个类同时演两个角色。**
+如果某个类既在当工厂又在当状态又在当门面，先拆。
+
+## 2. 反模式的心智模型：模式何时变成负担
+
+反模式不是"坏代码"，而是**在错误的地方用对了工具**：
+
+| 反模式 | 本质 | 解毒 |
+|---|---|---|
+| 金锤子 | 用熟悉的模式套所有问题 | Rule of Three，先问变化点 |
+| 上帝类 | 一个类承担所有职责 | SRP，把职责拆成角色 |
+| 面条代码 | 没有边界，全局乱飞 | 分层 + 模块边界 |
+| 复制粘贴 | 重复逻辑散落各处 | DRY，提取公共层 |
+| 过度工程 | 用架构解决不存在的问题 | YAGNI，匹配问题规模 |
+| 模式滥用 | 每个 if 都上策略/每个对象都单例 | 先问"更简单的方法够吗" |
+
+**一句话判断**：模式让"加东西"变便宜，但也让"读代码"变贵。
+当阅读成本超过收益时，模式就是负担。
+
+## 3. 从模式到架构：三种典型的"架构级组合"
+
+### 3.1 六边形架构（端口与适配器）
+
+```
+核心（业务规则，不认外部）
+  ├── 入站端口（用例接口）← 控制器适配器（Web/CLI）
+  └── 出站端口（抽象接口）→ 仓储/模型适配器（DB/LLM）
+
+用的模式：适配器（对接外部）+ 抽象工厂（造适配器族）
+          + 依赖注入（启动时装配）+ 策略（可替换实现）
+```
+
+### 3.2 事件驱动架构
+
+```
+领域事件 → 事件总线/消息队列 → 多个订阅者
+
+用的模式：观察者（通知）+ 中介者（协调）+ 命令（动作对象化）
+          + 备忘录（事件溯源快照）
+```
+
+### 3.3 Agent / LLM 应用架构
+
+```
+Agent 主循环（模板方法）
+  ├── 提示词策略（策略）
+  ├── 模型供应商适配（适配器 + 工厂）
+  ├── 工具调用记录（命令 + 备忘录）
+  ├── 生命周期状态（状态 + 观察者）
+  ├── Guardrails（责任链）
+  └── 对外入口 agent.run()（外观）
+```
+
+**架构 = 多个模式 + 一种组织原则。** 组织原则（依赖方向、事件流、状态机）
+比模式本身更决定系统的性格。
+
+## 4. 现代语言特性 vs 模式：思想不变，语法变甜
+
+| 模式 | 现代替代 | 思想 |
+|---|---|---|
+| 单例 | DI 容器、模块作用域 | 唯一性由容器管理 |
+| 策略 | 一等函数、lambda | 算法可互换 |
+| 命令 | 闭包 | 动作可传递 |
+| 迭代器 | 生成器、`for...in` | 遍历与结构解耦 |
+| 装饰器 | `@decorator`、AOP | 增强可叠加 |
+| 建造者 | 关键字参数、dataclass | 构造可读 |
+| 观察者 | EventEmitter、Signals | 事件广播 |
+| 责任链 | 中间件框架 | 请求沿链传递 |
+
+**结论**：语言特性是模式的语法糖，模式的思想（变化点在哪里、
+谁持有谁、调用往哪个方向）不变。学模式学的是**思想骨架**，
+不是某个语言的模板。
+
+## 5. AI 开发中的模式全景（实战视角）
+
+如果你在做一个 LLM 应用，这张图几乎必然出现：
+
+| 需求 | 模式 |
+|---|---|
+| 换模型不改业务 | 适配器 + 工厂 |
+| 调用加缓存/重试/限流 | 装饰器（或代理） |
+| 流式输出给 UI/日志/统计 | 观察者 |
+| 工具调用可审计、可重放 | 命令 |
+| Agent 状态流转 | 状态 + 观察者 |
+| 多步任务失败恢复 | 备忘录（检查点） |
+| 输入/输出安全 | 责任链（Guardrails） |
+| 多 Agent 协作 | 中介者 / 事件总线 |
+| 任务分解树 | 组合 |
+| 提示词模板库 | 原型 / 建造者 / 策略 |
+
+## 6. 最终决策心法
+
+面对任何设计问题，按顺序走：
+
+1. **描述问题，不带模式名**（"支付会不断增加，不想改 checkout"）；
+2. **指出变化点**（什么在变、什么不变）；
+3. **先试最简单方案**（if / 函数 / 字典）；
+4. **第三次遇到再抽象**（Rule of Three）；
+5. **选模式时先选方向**（出生 / 组合 / 协作），再选具体模式；
+6. **评估代价**（阅读成本、类数量、调试难度）；
+7. **留好退路**（模式应能被轻松拆掉）。
+
+## 7. 深化自检
+
+- [ ] 能说出"一个模式解决一个变化点"并举例
+- [ ] 能识别至少 4 种反模式并给出解毒
+- [ ] 能画出六边形架构中"抽象工厂 + 适配器"的分工
+- [ ] 能给一个 LLM 应用标出 8 个以上用到的模式
+- [ ] 能在引入任何模式前走完 7 步决策心法

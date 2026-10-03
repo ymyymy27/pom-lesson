@@ -1,0 +1,307 @@
+# 第4课：窗口函数
+
+## 1. 窗口函数是什么？
+
+### 一句话解释
+**窗口函数在"不合并行"的情况下做聚合计算** —— 既能看到每一行的明细，又能看到整体统计。
+
+### 对比理解
+
+```sql
+-- GROUP BY：行被压缩，看不到明细
+SELECT city, AVG(age) FROM users GROUP BY city;
+-- 结果：北京 28, 上海 25（每个城市一行）
+
+-- 窗口函数：每行都保留，额外加一列统计值
+SELECT name, city, age,
+    AVG(age) OVER (PARTITION BY city) AS 城市平均年龄
+FROM users;
+-- 结果：
+-- 张三  北京  25  28
+-- 李四  北京  30  28
+-- 王五  上海  22  25
+-- 赵六  上海  28  25
+```
+
+### 基本语法
+
+```sql
+函数() OVER (
+    PARTITION BY 分组列    -- 按什么分组（可选）
+    ORDER BY 排序列        -- 按什么排序（可选）
+    ROWS/RANGE 窗口范围    -- 计算范围（可选）
+)
+```
+
+---
+
+## 2. 排名函数
+
+### ROW_NUMBER() — 连续编号
+
+```sql
+-- 每个城市的用户按年龄排名
+SELECT name, city, age,
+    ROW_NUMBER() OVER (PARTITION BY city ORDER BY age DESC) AS 排名
+FROM users;
+
+-- 结果：
+-- 李四  北京  30  1
+-- 张三  北京  25  2
+-- 赵六  上海  28  1
+-- 王五  上海  22  2
+
+-- 实用：每组取Top N
+-- 每个城市年龄最大的用户
+SELECT * FROM (
+    SELECT name, city, age,
+        ROW_NUMBER() OVER (PARTITION BY city ORDER BY age DESC) AS rn
+    FROM users
+) t
+WHERE rn = 1;
+```
+
+### RANK() — 有并列有跳号
+
+```sql
+-- 成绩排名（有并列）
+SELECT name, score,
+    RANK() OVER (ORDER BY score DESC) AS 排名
+FROM students;
+-- 100  → 1
+-- 100  → 1  ← 并列第1
+--  95  → 3  ← 跳过第2
+--  90  → 4
+```
+
+### DENSE_RANK() — 有并列无跳号
+
+```sql
+SELECT name, score,
+    DENSE_RANK() OVER (ORDER BY score DESC) AS 排名
+FROM students;
+-- 100  → 1
+-- 100  → 1  ← 并列第1
+--  95  → 2  ← 紧接第2，不跳号
+--  90  → 3
+```
+
+### 三者对比
+
+| 函数 | 并列时 | 跳号 | 示例(100,100,95) |
+|------|--------|------|------------------|
+| `ROW_NUMBER()` | 不并列 | — | 1, 2, 3 |
+| `RANK()` | 并列 | 跳号 | 1, 1, 3 |
+| `DENSE_RANK()` | 并列 | 不跳 | 1, 1, 2 |
+
+---
+
+## 3. 聚合窗口函数
+
+### 累计统计
+
+```sql
+-- 每日累计销售额
+SELECT
+    order_date,
+    amount,
+    SUM(amount) OVER (ORDER BY order_date) AS 累计销售额,
+    AVG(amount) OVER (ORDER BY order_date) AS 累计平均,
+    COUNT(*) OVER (ORDER BY order_date) AS 累计订单数
+FROM orders;
+
+-- 结果：
+-- 01-01  100  100   100.0   1
+-- 01-02  200  300   150.0   2
+-- 01-03  150  450   150.0   3
+```
+
+### 分组累计
+
+```sql
+-- 每个用户的累计消费
+SELECT
+    user_id,
+    order_date,
+    amount,
+    SUM(amount) OVER (
+        PARTITION BY user_id
+        ORDER BY order_date
+    ) AS 用户累计消费
+FROM orders;
+```
+
+### 移动平均
+
+```sql
+-- 7日移动平均（滑动窗口）
+SELECT
+    order_date,
+    daily_amount,
+    AVG(daily_amount) OVER (
+        ORDER BY order_date
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    ) AS 七日移动平均
+FROM daily_sales;
+
+-- ROWS BETWEEN 说明：
+-- ROWS BETWEEN 6 PRECEDING AND CURRENT ROW  → 当前行和前6行（共7行）
+-- ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW → 从头到当前行
+-- ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  → 前一行到后一行（共3行）
+```
+
+---
+
+## 4. 偏移函数
+
+### LAG() — 取前面的行
+
+```sql
+-- 与上一条记录对比
+SELECT
+    order_date,
+    amount,
+    LAG(amount, 1) OVER (ORDER BY order_date) AS 上一天金额,
+    amount - LAG(amount, 1) OVER (ORDER BY order_date) AS 环比变化
+FROM daily_sales;
+
+-- LAG(列, N, 默认值)
+-- N: 偏移行数（默认1）
+-- 默认值: 没有前行时的值（默认NULL）
+```
+
+### LEAD() — 取后面的行
+
+```sql
+-- 查看下一次消费间隔
+SELECT
+    user_id,
+    order_date,
+    LEAD(order_date, 1) OVER (
+        PARTITION BY user_id ORDER BY order_date
+    ) AS 下次消费日期,
+    DATEDIFF(
+        LEAD(order_date, 1) OVER (PARTITION BY user_id ORDER BY order_date),
+        order_date
+    ) AS 消费间隔天数
+FROM orders;
+```
+
+### FIRST_VALUE() / LAST_VALUE()
+
+```sql
+-- 每个用户的第一笔和最近一笔订单金额
+SELECT
+    user_id,
+    order_date,
+    amount,
+    FIRST_VALUE(amount) OVER (
+        PARTITION BY user_id ORDER BY order_date
+    ) AS 首单金额,
+    LAST_VALUE(amount) OVER (
+        PARTITION BY user_id ORDER BY order_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS 末单金额
+FROM orders;
+```
+
+---
+
+## 5. NTILE() — 分桶
+
+```sql
+-- 将用户按消费金额分成4等份（四分位）
+SELECT
+    user_id,
+    total_amount,
+    NTILE(4) OVER (ORDER BY total_amount DESC) AS 消费等级
+FROM (
+    SELECT user_id, SUM(amount) AS total_amount
+    FROM orders
+    GROUP BY user_id
+) t;
+
+-- 等级1: 消费最高的25%
+-- 等级2: 消费次高的25%
+-- 等级3: 消费次低的25%
+-- 等级4: 消费最低的25%
+```
+
+---
+
+## 6. 实用场景
+
+### 6.1 同比/环比
+
+```sql
+-- 月度销售额同比环比
+SELECT
+    月份,
+    销售额,
+    LAG(销售额, 1) OVER (ORDER BY 月份) AS 上月,
+    LAG(销售额, 12) OVER (ORDER BY 月份) AS 去年同月,
+    ROUND((销售额 - LAG(销售额, 1) OVER (ORDER BY 月份))
+        / LAG(销售额, 1) OVER (ORDER BY 月份) * 100, 1) AS 环比增长率,
+    ROUND((销售额 - LAG(销售额, 12) OVER (ORDER BY 月份))
+        / LAG(销售额, 12) OVER (ORDER BY 月份) * 100, 1) AS 同比增长率
+FROM monthly_sales;
+```
+
+### 6.2 Top N per Group
+
+```sql
+-- 每个类别销量前3的商品
+SELECT * FROM (
+    SELECT
+        category,
+        product_name,
+        sales,
+        ROW_NUMBER() OVER (
+            PARTITION BY category ORDER BY sales DESC
+        ) AS rn
+    FROM products
+) t
+WHERE rn <= 3;
+```
+
+### 6.3 占比计算
+
+```sql
+-- 每个商品销售额占总销售额的百分比
+SELECT
+    product_name,
+    amount,
+    SUM(amount) OVER () AS 总销售额,
+    ROUND(amount * 100.0 / SUM(amount) OVER (), 2) AS 占比
+FROM product_sales
+ORDER BY 占比 DESC;
+```
+
+---
+
+## 7. 动手练习
+
+1. 用 ROW_NUMBER 给用户按注册时间编号
+2. 计算每日订单的累计总额
+3. 用 LAG 计算每日订单金额的环比变化
+4. 找出每个城市消费最高的3个用户
+5. 用 NTILE 将用户分成高/中/低三个消费层
+
+---
+
+## 8. 小结
+
+| 函数 | 作用 | 典型场景 |
+|------|------|---------|
+| `ROW_NUMBER()` | 连续编号 | Top N per Group |
+| `RANK()` | 排名（跳号） | 成绩排名 |
+| `DENSE_RANK()` | 排名（不跳） | 密集排名 |
+| `SUM() OVER` | 累计求和 | 累计销售额 |
+| `AVG() OVER` | 移动平均 | 7日平均 |
+| `LAG()` | 前N行 | 环比分析 |
+| `LEAD()` | 后N行 | 消费间隔 |
+| `NTILE()` | 分桶 | 用户分层 |
+
+---
+
+**下一课：** `05_practice.md` - 产品经理 SQL 实战

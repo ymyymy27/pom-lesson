@@ -1,0 +1,33 @@
+# PowerShell
+*.ps1
+*.psm1
+*.psd1
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Sensitive
+*.pem
+*.key
+credentials.txt
+secrets.json
+.env

@@ -1,0 +1,242 @@
+# 第2课：聚合函数与分组
+
+## 1. 聚合函数
+
+### 一句话解释
+**聚合函数把多行数据"压缩"成一个值** —— 比如求总数、求平均、找最大值。
+
+### 五大聚合函数
+
+| 函数 | 作用 | 示例 |
+|------|------|------|
+| `COUNT()` | 计数 | 有多少用户？ |
+| `SUM()` | 求和 | 总销售额是多少？ |
+| `AVG()` | 平均值 | 平均订单金额？ |
+| `MAX()` | 最大值 | 最高消费是多少？ |
+| `MIN()` | 最小值 | 最早注册时间？ |
+
+### 基本用法
+
+```sql
+-- 用户总数
+SELECT COUNT(*) AS 用户总数 FROM users;
+
+-- 非空值计数（忽略 NULL）
+SELECT COUNT(phone) AS 有手机号的用户数 FROM users;
+
+-- 去重计数
+SELECT COUNT(DISTINCT city) AS 城市数 FROM users;
+
+-- 总销售额
+SELECT SUM(amount) AS 总销售额 FROM orders;
+
+-- 平均订单金额
+SELECT AVG(amount) AS 平均订单额 FROM orders;
+
+-- 最大/最小订单
+SELECT MAX(amount) AS 最大订单, MIN(amount) AS 最小订单 FROM orders;
+
+-- 组合使用
+SELECT
+    COUNT(*) AS 订单总数,
+    SUM(amount) AS 总金额,
+    AVG(amount) AS 平均金额,
+    MAX(amount) AS 最大金额,
+    MIN(amount) AS 最小金额
+FROM orders;
+```
+
+---
+
+## 2. GROUP BY — 分组聚合
+
+### 一句话解释
+**先分组，再对每组分别聚合。**
+
+```
+没有 GROUP BY:  所有数据 → 一个结果
+有 GROUP BY:    先分组 → 每组一个结果
+```
+
+### 基本用法
+
+```sql
+-- 每个城市有多少用户？
+SELECT city, COUNT(*) AS 用户数
+FROM users
+GROUP BY city;
+
+-- 结果:
+-- 北京  120
+-- 上海  95
+-- 深圳  80
+
+-- 每个月的订单数和总金额
+SELECT
+    YEAR(order_date) AS 年,
+    MONTH(order_date) AS 月,
+    COUNT(*) AS 订单数,
+    SUM(amount) AS 总金额
+FROM orders
+GROUP BY YEAR(order_date), MONTH(order_date)
+ORDER BY 年, 月;
+
+-- 每个用户的消费统计
+SELECT
+    user_id,
+    COUNT(*) AS 订单数,
+    SUM(amount) AS 总消费,
+    AVG(amount) AS 平均消费,
+    MAX(amount) AS 最大单笔
+FROM orders
+GROUP BY user_id
+ORDER BY 总消费 DESC;
+```
+
+### ⚠️ 重要规则
+
+```sql
+-- SELECT 中出现的非聚合列，必须在 GROUP BY 中
+
+-- ✓ 正确
+SELECT city, COUNT(*) FROM users GROUP BY city;
+
+-- ✗ 错误（name 没有在 GROUP BY 中）
+SELECT city, name, COUNT(*) FROM users GROUP BY city;
+```
+
+---
+
+## 3. HAVING — 对分组结果过滤
+
+### WHERE vs HAVING
+
+```
+WHERE:   过滤原始行    （分组前）
+HAVING:  过滤分组结果  （分组后）
+```
+
+```sql
+-- 找出用户数超过 50 的城市
+SELECT city, COUNT(*) AS 用户数
+FROM users
+GROUP BY city
+HAVING COUNT(*) > 50;
+
+-- 找出总消费超过 1000 的用户
+SELECT user_id, SUM(amount) AS 总消费
+FROM orders
+GROUP BY user_id
+HAVING SUM(amount) > 1000
+ORDER BY 总消费 DESC;
+
+-- WHERE + HAVING 结合
+-- 2024年，月订单数超过100的月份
+SELECT
+    MONTH(order_date) AS 月,
+    COUNT(*) AS 订单数,
+    SUM(amount) AS 总金额
+FROM orders
+WHERE YEAR(order_date) = 2024    -- 先筛选2024年的数据
+GROUP BY MONTH(order_date)
+HAVING COUNT(*) > 100            -- 再筛选订单数>100的月
+ORDER BY 月;
+```
+
+---
+
+## 4. 实用场景
+
+### 4.1 用户注册趋势
+
+```sql
+-- 每天新增用户数
+SELECT
+    DATE(created_at) AS 日期,
+    COUNT(*) AS 新增用户
+FROM users
+GROUP BY DATE(created_at)
+ORDER BY 日期 DESC
+LIMIT 30;
+```
+
+### 4.2 销售排行
+
+```sql
+-- 销量Top10产品
+SELECT
+    product,
+    COUNT(*) AS 销量,
+    SUM(amount) AS 总销售额
+FROM orders
+GROUP BY product
+ORDER BY 销量 DESC
+LIMIT 10;
+```
+
+### 4.3 用户活跃度分层
+
+```sql
+-- 按消费次数分层
+SELECT
+    CASE
+        WHEN order_count = 1 THEN '一次性用户'
+        WHEN order_count BETWEEN 2 AND 5 THEN '普通用户'
+        WHEN order_count BETWEEN 6 AND 20 THEN '活跃用户'
+        ELSE '重度用户'
+    END AS 用户层级,
+    COUNT(*) AS 人数
+FROM (
+    SELECT user_id, COUNT(*) AS order_count
+    FROM orders
+    GROUP BY user_id
+) t
+GROUP BY 用户层级;
+```
+
+### 4.4 时间段分析
+
+```sql
+-- 每小时订单分布（找到高峰期）
+SELECT
+    HOUR(order_time) AS 小时,
+    COUNT(*) AS 订单数
+FROM orders
+GROUP BY HOUR(order_time)
+ORDER BY 小时;
+```
+
+---
+
+## 5. 动手练习
+
+```
+users 表: id, name, age, city, gender, created_at
+orders 表: id, user_id, product, amount, order_date
+```
+
+1. 统计男女用户各有多少人
+2. 查询每个城市的平均年龄，按平均年龄降序
+3. 查询每个用户的订单数和总消费金额
+4. 找出消费总额超过 500 的用户
+5. 统计每月的新增用户数
+6. 找出购买次数最多的 Top5 用户
+
+---
+
+## 6. 小结
+
+| 语法 | 作用 | 示例 |
+|------|------|------|
+| `COUNT()` | 计数 | `COUNT(*)`, `COUNT(DISTINCT col)` |
+| `SUM()` | 求和 | `SUM(amount)` |
+| `AVG()` | 平均 | `AVG(amount)` |
+| `MAX()/MIN()` | 最大/最小 | `MAX(created_at)` |
+| `GROUP BY` | 分组 | `GROUP BY city` |
+| `HAVING` | 过滤分组 | `HAVING COUNT(*) > 10` |
+
+**核心区别：** WHERE 过滤行（分组前），HAVING 过滤组（分组后）。
+
+---
+
+**下一课：** `03_join_and_subquery.md` - 多表连接与子查询

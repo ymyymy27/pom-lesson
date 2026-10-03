@@ -1,0 +1,231 @@
+{
+  "nodes": [
+    {
+      "id": "李四",
+      "type": "Person",
+      "description": ""
+    },
+    {
+      "id": "研发部",
+      "type": "Department",
+      "description": ""
+    },
+    {
+      "id": "张三",
+      "type": "Person",
+      "description": ""
+    },
+    {
+      "id": "王五",
+      "type": "Person",
+      "description": ""
+    },
+    {
+      "id": "赵六",
+      "type": "Person",
+      "description": ""
+    },
+    {
+      "id": "市场部",
+      "type": "Department",
+      "description": ""
+    },
+    {
+      "id": "项目X",
+      "type": "Project",
+      "description": ""
+    },
+    {
+      "id": "项目Y",
+      "type": "Project",
+      "description": ""
+    },
+    {
+      "id": "项目Z",
+      "type": "Project",
+      "description": ""
+    },
+    {
+      "id": "Python",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "FastAPI",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "PostgreSQL",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "Redis",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "ClickHouse",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "React",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "Next.js",
+      "type": "Technology",
+      "description": ""
+    },
+    {
+      "id": "Vercel",
+      "type": "Technology",
+      "description": ""
+    }
+  ],
+  "edges": [
+    {
+      "source": "李四",
+      "target": "研发部",
+      "relation": "MANAGES",
+      "description": "李四管理研发部",
+      "count": 1
+    },
+    {
+      "source": "李四",
+      "target": "项目Y",
+      "relation": "WORKS_ON",
+      "description": "李四负责项目Y",
+      "count": 1
+    },
+    {
+      "source": "研发部",
+      "target": "项目X",
+      "relation": "OWNS",
+      "description": "研发部拥有项目X",
+      "count": 1
+    },
+    {
+      "source": "研发部",
+      "target": "项目Y",
+      "relation": "OWNS",
+      "description": "研发部拥有项目Y",
+      "count": 1
+    },
+    {
+      "source": "张三",
+      "target": "李四",
+      "relation": "REPORTS_TO",
+      "description": "张三汇报给李四",
+      "count": 1
+    },
+    {
+      "source": "张三",
+      "target": "项目X",
+      "relation": "WORKS_ON",
+      "description": "张三参与项目X",
+      "count": 1
+    },
+    {
+      "source": "王五",
+      "target": "李四",
+      "relation": "REPORTS_TO",
+      "description": "王五汇报给李四",
+      "count": 1
+    },
+    {
+      "source": "王五",
+      "target": "项目X",
+      "relation": "WORKS_ON",
+      "description": "王五参与项目X",
+      "count": 1
+    },
+    {
+      "source": "赵六",
+      "target": "市场部",
+      "relation": "MANAGES",
+      "description": "赵六管理市场部",
+      "count": 1
+    },
+    {
+      "source": "赵六",
+      "target": "项目Z",
+      "relation": "WORKS_ON",
+      "description": "赵六负责项目Z",
+      "count": 1
+    },
+    {
+      "source": "市场部",
+      "target": "项目Z",
+      "relation": "OWNS",
+      "description": "市场部拥有项目Z",
+      "count": 1
+    },
+    {
+      "source": "项目X",
+      "target": "Python",
+      "relation": "USES",
+      "description": "项目X使用Python",
+      "count": 1
+    },
+    {
+      "source": "项目X",
+      "target": "FastAPI",
+      "relation": "USES",
+      "description": "项目X使用FastAPI",
+      "count": 1
+    },
+    {
+      "source": "项目X",
+      "target": "PostgreSQL",
+      "relation": "USES",
+      "description": "项目X使用PostgreSQL",
+      "count": 1
+    },
+    {
+      "source": "项目X",
+      "target": "Redis",
+      "relation": "USES",
+      "description": "项目X使用Redis",
+      "count": 1
+    },
+    {
+      "source": "项目Y",
+      "target": "Python",
+      "relation": "USES",
+      "description": "项目Y使用Python",
+      "count": 1
+    },
+    {
+      "source": "项目Y",
+      "target": "ClickHouse",
+      "relation": "USES",
+      "description": "项目Y使用ClickHouse",
+      "count": 1
+    },
+    {
+      "source": "项目Y",
+      "target": "React",
+      "relation": "USES",
+      "description": "项目Y使用React",
+      "count": 1
+    },
+    {
+      "source": "项目Z",
+      "target": "Next.js",
+      "relation": "USES",
+      "description": "项目Z使用Next.js",
+      "count": 1
+    },
+    {
+      "source": "项目Z",
+      "target": "Vercel",
+      "relation": "USES",
+      "description": "项目Z使用Vercel",
+      "count": 1
+    }
+  ]
+}

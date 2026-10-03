@@ -1,0 +1,430 @@
+# 第5课：产品经理 SQL 实战
+
+## 1. 数据表结构
+
+本课所有练习基于以下表结构（典型的产品数据模型）：
+
+```sql
+-- 用户表
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    name VARCHAR(50),
+    gender VARCHAR(10),
+    city VARCHAR(50),
+    channel VARCHAR(50),     -- 注册渠道（app/web/wechat）
+    created_at DATETIME      -- 注册时间
+);
+
+-- 登录日志表
+CREATE TABLE user_logins (
+    id INT PRIMARY KEY,
+    user_id INT,
+    login_date DATE,
+    device VARCHAR(20)       -- 设备类型（iOS/Android/PC）
+);
+
+-- 订单表
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    user_id INT,
+    product_id INT,
+    amount DECIMAL(10,2),
+    status VARCHAR(20),      -- paid/cancelled/refunded
+    order_date DATETIME
+);
+
+-- 商品表
+CREATE TABLE products (
+    id INT PRIMARY KEY,
+    name VARCHAR(100),
+    category VARCHAR(50),
+    price DECIMAL(10,2)
+);
+
+-- 页面访问日志
+CREATE TABLE page_views (
+    id INT PRIMARY KEY,
+    user_id INT,
+    page VARCHAR(100),       -- 页面路径
+    visit_time DATETIME,
+    session_id VARCHAR(50)
+);
+```
+
+---
+
+## 2. 用户增长分析
+
+### 2.1 每日/每周/每月新增用户
+
+```sql
+-- 每日新增
+SELECT
+    DATE(created_at) AS 日期,
+    COUNT(*) AS 新增用户数
+FROM users
+GROUP BY DATE(created_at)
+ORDER BY 日期;
+
+-- 每周新增（按自然周）
+SELECT
+    YEARWEEK(created_at) AS 年周,
+    COUNT(*) AS 新增用户数
+FROM users
+GROUP BY YEARWEEK(created_at)
+ORDER BY 年周;
+
+-- 每月新增
+SELECT
+    DATE_FORMAT(created_at, '%Y-%m') AS 月份,
+    COUNT(*) AS 新增用户数
+FROM users
+GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+ORDER BY 月份;
+```
+
+### 2.2 渠道分析
+
+```sql
+-- 各渠道注册用户数和占比
+SELECT
+    channel AS 渠道,
+    COUNT(*) AS 用户数,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS 占比
+FROM users
+GROUP BY channel
+ORDER BY 用户数 DESC;
+
+-- 各渠道用户的付费转化率
+SELECT
+    u.channel AS 渠道,
+    COUNT(DISTINCT u.id) AS 注册用户,
+    COUNT(DISTINCT o.user_id) AS 付费用户,
+    ROUND(COUNT(DISTINCT o.user_id) * 100.0
+        / COUNT(DISTINCT u.id), 1) AS 付费转化率
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id AND o.status = 'paid'
+GROUP BY u.channel
+ORDER BY 付费转化率 DESC;
+```
+
+---
+
+## 3. 留存分析（重点！面试高频）
+
+### 3.1 次日留存率
+
+```sql
+-- 次日留存：注册第二天还登录的用户比例
+SELECT
+    DATE(u.created_at) AS 注册日期,
+    COUNT(DISTINCT u.id) AS 注册人数,
+    COUNT(DISTINCT l.user_id) AS 次日留存人数,
+    ROUND(COUNT(DISTINCT l.user_id) * 100.0
+        / COUNT(DISTINCT u.id), 1) AS 次日留存率
+FROM users u
+LEFT JOIN user_logins l
+    ON u.id = l.user_id
+    AND l.login_date = DATE(u.created_at) + INTERVAL 1 DAY
+GROUP BY DATE(u.created_at)
+ORDER BY 注册日期;
+```
+
+### 3.2 N日留存率
+
+```sql
+-- 计算第1/3/7/30日留存率
+SELECT
+    DATE(u.created_at) AS 注册日期,
+    COUNT(DISTINCT u.id) AS 注册人数,
+    COUNT(DISTINCT CASE
+        WHEN l.login_date = DATE(u.created_at) + INTERVAL 1 DAY
+        THEN l.user_id END) AS D1留存,
+    COUNT(DISTINCT CASE
+        WHEN l.login_date = DATE(u.created_at) + INTERVAL 3 DAY
+        THEN l.user_id END) AS D3留存,
+    COUNT(DISTINCT CASE
+        WHEN l.login_date = DATE(u.created_at) + INTERVAL 7 DAY
+        THEN l.user_id END) AS D7留存,
+    COUNT(DISTINCT CASE
+        WHEN l.login_date = DATE(u.created_at) + INTERVAL 30 DAY
+        THEN l.user_id END) AS D30留存
+FROM users u
+LEFT JOIN user_logins l ON u.id = l.user_id
+GROUP BY DATE(u.created_at)
+ORDER BY 注册日期;
+```
+
+### 3.3 留存率解读
+
+```
+行业参考值（移动APP）：
+  次日留存 > 40%   → 合格
+  7日留存  > 20%   → 合格
+  30日留存 > 10%   → 合格
+
+留存率低的排查方向：
+  1. 新用户引导体验差 → 优化 onboarding
+  2. 核心功能不明确 → 强化 aha moment
+  3. 推送/召回不足 → 增加触达
+  4. 特定渠道质量差 → 分渠道看留存
+```
+
+---
+
+## 4. 漏斗分析
+
+### 4.1 注册-下单漏斗
+
+```sql
+-- 从浏览 → 注册 → 首单 → 复购的转化漏斗
+SELECT
+    '1_访问' AS 步骤, COUNT(DISTINCT user_id) AS 人数
+FROM page_views
+WHERE visit_time >= '2024-01-01'
+UNION ALL
+SELECT
+    '2_注册', COUNT(DISTINCT id)
+FROM users
+WHERE created_at >= '2024-01-01'
+UNION ALL
+SELECT
+    '3_首单', COUNT(DISTINCT user_id)
+FROM orders
+WHERE status = 'paid'
+AND order_date >= '2024-01-01'
+UNION ALL
+SELECT
+    '4_复购', COUNT(DISTINCT user_id)
+FROM (
+    SELECT user_id, COUNT(*) AS cnt
+    FROM orders
+    WHERE status = 'paid' AND order_date >= '2024-01-01'
+    GROUP BY user_id
+    HAVING cnt >= 2
+) t;
+```
+
+### 4.2 页面转化漏斗
+
+```sql
+-- 电商漏斗：首页 → 商品页 → 加购 → 下单 → 支付
+SELECT
+    page,
+    COUNT(DISTINCT session_id) AS 会话数,
+    ROUND(COUNT(DISTINCT session_id) * 100.0
+        / FIRST_VALUE(COUNT(DISTINCT session_id))
+          OVER (ORDER BY
+            CASE page
+                WHEN '/home' THEN 1
+                WHEN '/product' THEN 2
+                WHEN '/cart' THEN 3
+                WHEN '/checkout' THEN 4
+                WHEN '/payment' THEN 5
+            END
+          ), 1) AS 转化率
+FROM page_views
+WHERE page IN ('/home', '/product', '/cart', '/checkout', '/payment')
+GROUP BY page
+ORDER BY
+    CASE page
+        WHEN '/home' THEN 1
+        WHEN '/product' THEN 2
+        WHEN '/cart' THEN 3
+        WHEN '/checkout' THEN 4
+        WHEN '/payment' THEN 5
+    END;
+```
+
+---
+
+## 5. 用户分层（RFM 模型）
+
+```sql
+-- RFM: Recency(最近消费) + Frequency(消费频率) + Monetary(消费金额)
+WITH user_rfm AS (
+    SELECT
+        user_id,
+        DATEDIFF(CURRENT_DATE, MAX(order_date)) AS recency,
+        COUNT(*) AS frequency,
+        SUM(amount) AS monetary
+    FROM orders
+    WHERE status = 'paid'
+    GROUP BY user_id
+),
+user_score AS (
+    SELECT
+        user_id,
+        recency, frequency, monetary,
+        NTILE(5) OVER (ORDER BY recency ASC) AS r_score,   -- 越近越高
+        NTILE(5) OVER (ORDER BY frequency DESC) AS f_score, -- 越多越高
+        NTILE(5) OVER (ORDER BY monetary DESC) AS m_score   -- 越多越高
+    FROM user_rfm
+)
+SELECT
+    CASE
+        WHEN r_score >= 4 AND f_score >= 4 THEN '重要价值用户'
+        WHEN r_score >= 4 AND f_score < 4  THEN '重要发展用户'
+        WHEN r_score < 4  AND f_score >= 4 THEN '重要挽留用户'
+        WHEN r_score < 4  AND f_score < 4  THEN '一般/流失用户'
+    END AS 用户分层,
+    COUNT(*) AS 人数,
+    ROUND(AVG(monetary), 2) AS 平均消费
+FROM user_score
+GROUP BY 用户分层;
+```
+
+---
+
+## 6. 活跃用户分析
+
+### 6.1 DAU / WAU / MAU
+
+```sql
+-- DAU (日活)
+SELECT
+    login_date,
+    COUNT(DISTINCT user_id) AS DAU
+FROM user_logins
+GROUP BY login_date
+ORDER BY login_date;
+
+-- MAU (月活)
+SELECT
+    DATE_FORMAT(login_date, '%Y-%m') AS 月份,
+    COUNT(DISTINCT user_id) AS MAU
+FROM user_logins
+GROUP BY DATE_FORMAT(login_date, '%Y-%m')
+ORDER BY 月份;
+
+-- DAU/MAU 比率（用户粘性指标）
+-- 越高说明用户越粘
+SELECT
+    DATE_FORMAT(l.login_date, '%Y-%m') AS 月份,
+    COUNT(DISTINCT l.login_date, l.user_id)
+        / COUNT(DISTINCT l.user_id) AS DAU_MAU比率
+FROM user_logins l
+GROUP BY DATE_FORMAT(l.login_date, '%Y-%m');
+```
+
+### 6.2 新老用户占比
+
+```sql
+-- 每日新老用户构成
+SELECT
+    l.login_date AS 日期,
+    COUNT(DISTINCT CASE
+        WHEN DATE(u.created_at) = l.login_date THEN l.user_id
+    END) AS 新用户,
+    COUNT(DISTINCT CASE
+        WHEN DATE(u.created_at) < l.login_date THEN l.user_id
+    END) AS 老用户,
+    COUNT(DISTINCT l.user_id) AS 总活跃
+FROM user_logins l
+JOIN users u ON l.user_id = u.id
+GROUP BY l.login_date
+ORDER BY 日期;
+```
+
+---
+
+## 7. A/B 测试分析
+
+```sql
+-- 假设有实验分组表
+-- ab_test: user_id, group_name (A/B), metric_value
+
+-- 对比两组的核心指标
+SELECT
+    group_name AS 实验组,
+    COUNT(*) AS 样本数,
+    AVG(metric_value) AS 均值,
+    STDDEV(metric_value) AS 标准差,
+    MIN(metric_value) AS 最小值,
+    MAX(metric_value) AS 最大值,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY metric_value) AS 中位数
+FROM ab_test
+GROUP BY group_name;
+
+-- 分组转化率对比
+SELECT
+    group_name,
+    COUNT(*) AS 总人数,
+    SUM(CASE WHEN converted = 1 THEN 1 ELSE 0 END) AS 转化人数,
+    ROUND(SUM(CASE WHEN converted = 1 THEN 1 ELSE 0 END)
+        * 100.0 / COUNT(*), 2) AS 转化率
+FROM ab_test
+GROUP BY group_name;
+```
+
+---
+
+## 8. 面试高频 SQL 题
+
+### 题1: 连续登录N天的用户
+
+```sql
+-- 找出连续登录3天及以上的用户
+SELECT DISTINCT user_id
+FROM (
+    SELECT
+        user_id,
+        login_date,
+        login_date - ROW_NUMBER() OVER (
+            PARTITION BY user_id ORDER BY login_date
+        ) * INTERVAL 1 DAY AS grp
+    FROM (SELECT DISTINCT user_id, login_date FROM user_logins) t
+) t2
+GROUP BY user_id, grp
+HAVING COUNT(*) >= 3;
+
+-- 思路：连续日期减去行号，结果相同则是连续的
+```
+
+### 题2: 每个用户的第二笔订单
+
+```sql
+SELECT user_id, order_date, amount
+FROM (
+    SELECT
+        user_id, order_date, amount,
+        ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY order_date) AS rn
+    FROM orders
+    WHERE status = 'paid'
+) t
+WHERE rn = 2;
+```
+
+### 题3: 求中位数
+
+```sql
+-- 方法：用 ROW_NUMBER 和 COUNT 定位中间位置
+SELECT AVG(amount) AS 中位数
+FROM (
+    SELECT amount,
+        ROW_NUMBER() OVER (ORDER BY amount) AS rn,
+        COUNT(*) OVER () AS total
+    FROM orders
+) t
+WHERE rn IN (FLOOR((total + 1) / 2), CEIL((total + 1) / 2));
+```
+
+---
+
+## 9. 小结
+
+| 分析场景 | 核心 SQL 技巧 |
+|---------|--------------|
+| 用户增长 | GROUP BY + DATE函数 |
+| 留存分析 | LEFT JOIN + CASE WHEN + DATE运算 |
+| 漏斗分析 | UNION ALL + COUNT DISTINCT |
+| 用户分层 | NTILE() + CASE WHEN |
+| DAU/MAU | COUNT DISTINCT + 日期格式 |
+| A/B测试 | GROUP BY 实验组 + 聚合对比 |
+| 连续登录 | ROW_NUMBER() + 日期差技巧 |
+
+---
+
+**learn-sql 课程完成！**
+
+回到总目录：[learn-tools README](../README.md)

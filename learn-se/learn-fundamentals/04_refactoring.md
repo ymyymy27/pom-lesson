@@ -1,0 +1,383 @@
+# 第4课：重构
+
+## 1. 什么是重构？
+
+### 一句话解释
+**重构是在不改变外部行为的前提下，改善代码内部结构** —— 像整理房间：东西还是那些，但更好找了。
+
+### 重构 ≠ 重写
+
+| | 重构 | 重写 |
+|---|------|------|
+| 行为 | 不变 | 可能变 |
+| 范围 | 渐进式小步 | 大范围替换 |
+| 风险 | 低（有测试保护） | 高 |
+| 时机 | 持续进行 | 系统实在无法维护时 |
+
+### 什么时候该重构？
+
+**Martin Fowler 的「三次法则」：**
+> 第一次做某件事 —— 直接做  
+> 第二次遇到类似 —— 忍受重复  
+> 第三次 —— 重构
+
+**其他信号：**
+- 加新功能时改动面越来越大
+- 同样类型的 Bug 反复出现
+- 新人看不懂代码结构
+- 测试越来越难写
+
+**不该重构的时候：**
+- 没有测试覆盖且无法快速补测
+- 代码即将被废弃
+- 临近发布 deadline（除非阻塞发布）
+
+---
+
+## 2. 重构的安全网：测试
+
+```
+重构前：确保测试全绿 ✅
+   ↓
+小步修改
+   ↓
+每步后：跑测试 ✅
+   ↓
+全绿 → 提交；变红 → 回滚这一步
+```
+
+**没有测试的重构 = 裸走钢丝。**
+
+---
+
+## 3. 常见重构手法
+
+### 3.1 提取函数（Extract Function）
+
+**场景：** 函数太长，有一段逻辑可以独立命名。
+
+```python
+# Before
+def print_order_summary(order):
+    print(f"Order #{order.id}")
+    print(f"Customer: {order.customer.name}")
+    total = sum(item.price * item.qty for item in order.items)
+    tax = total * 0.1
+    print(f"Subtotal: ${total:.2f}")
+    print(f"Tax: ${tax:.2f}")
+    print(f"Total: ${total + tax:.2f}")
+
+# After
+def print_order_summary(order):
+    print_header(order)
+    total, tax = calculate_totals(order)
+    print_totals(total, tax)
+
+def print_header(order):
+    print(f"Order #{order.id}")
+    print(f"Customer: {order.customer.name}")
+
+def calculate_totals(order):
+    total = sum(item.price * item.qty for item in order.items)
+    tax = total * 0.1
+    return total, tax
+
+def print_totals(total, tax):
+    print(f"Subtotal: ${total:.2f}")
+    print(f"Tax: ${tax:.2f}")
+    print(f"Total: ${total + tax:.2f}")
+```
+
+### 3.2 提取类（Extract Class）
+
+**场景：** 一个类承担太多职责（违反 SRP）。
+
+```python
+# Before
+class Employee:
+    def __init__(self, name, department, office_number):
+        self.name = name
+        self.department = department
+        self.office_number = office_number
+
+    def get_office_address(self):
+        return f"Building A, Floor 3, Room {self.office_number}"
+
+# After
+class Employee:
+    def __init__(self, name, department, office: Office):
+        self.name = name
+        self.department = department
+        self.office = office
+
+class Office:
+    def __init__(self, building, floor, room):
+        self.building = building
+        self.floor = floor
+        self.room = room
+
+    def address(self):
+        return f"{self.building}, Floor {self.floor}, Room {self.room}"
+```
+
+### 3.3 以多态取代条件表达式（Replace Conditional with Polymorphism）
+
+**场景：** 大量 if/elif/switch 按类型分支。
+
+```python
+# Before
+def calculate_shipping(order_type, weight):
+    if order_type == "express":
+        return weight * 2.0 + 10
+    elif order_type == "standard":
+        return weight * 0.5 + 5
+    elif order_type == "free":
+        return 0
+
+# After
+class ShippingStrategy(ABC):
+    @abstractmethod
+    def calculate(self, weight): ...
+
+class ExpressShipping(ShippingStrategy):
+    def calculate(self, weight):
+        return weight * 2.0 + 10
+
+class StandardShipping(ShippingStrategy):
+    def calculate(self, weight):
+        return weight * 0.5 + 5
+
+# 使用
+def calculate_shipping(strategy: ShippingStrategy, weight):
+    return strategy.calculate(weight)
+```
+
+→ 详见 `learn-design-patterns/` 策略模式
+
+### 3.4 搬移方法（Move Method）
+
+**场景：** 方法使用了另一个类的数据多于自己的。
+
+```python
+# Before — Account 过度使用 Customer 的数据
+class Account:
+    def overdraft_charge(self, customer):
+        if customer.credit_rating > 2:
+            return customer.balance * 0.1
+        return customer.balance * 0.05
+
+# After — 逻辑搬到数据所在处
+class Customer:
+    def overdraft_charge(self):
+        rate = 0.05 if self.credit_rating > 2 else 0.1
+        return self.balance * rate
+```
+
+### 3.5 引入参数对象（Introduce Parameter Object）
+
+**场景：** 多个参数总是一起出现。
+
+```python
+# Before
+def create_event(title, start_date, end_date, location, capacity):
+    ...
+
+create_event("Conf", "2026-01-01", "2026-01-03", "Beijing", 100)
+
+# After
+@dataclass
+class EventConfig:
+    title: str
+    start_date: str
+    end_date: str
+    location: str
+    capacity: int
+
+def create_event(config: EventConfig):
+    ...
+
+create_event(EventConfig("Conf", "2026-01-01", "2026-01-03", "Beijing", 100))
+```
+
+### 3.6 内联（Inline）
+
+**场景：** 过度拆分，间接层无价值。
+
+```python
+# Before
+def get_user_name(user):
+    return user.get_name()
+
+def display_greeting(user):
+    print(f"Hello, {get_user_name(user)}!")
+
+# After
+def display_greeting(user):
+    print(f"Hello, {user.get_name()}!")
+```
+
+### 3.7 重命名（Rename）
+
+**最低成本、最高收益的重构之一。**
+
+```python
+# Before
+def calc(d, t, f):
+    return d * t * f
+
+# After
+def calculate_shipping_cost(distance_km, weight_kg, fuel_price):
+    return distance_km * weight_kg * fuel_price
+```
+
+现代 IDE 的重构功能（F2 / Shift+F6）可安全重命名所有引用。
+
+---
+
+## 4. 重构手法速查表
+
+| 坏味道 | 重构手法 |
+|--------|---------|
+| 过长函数 | 提取函数 |
+| 过大类 | 提取类、提取子类 |
+| 过长参数列表 | 引入参数对象、保持对象完整 |
+| 重复代码 | 提取函数/类 |
+| switch 语句 | 以多态取代条件 |
+| 依恋情结 | 搬移方法/字段 |
+| 数据泥团 | 提取类、引入参数对象 |
+| 基本类型偏执 | 以对象取代基本类型 |
+| 发散式变化 | 搬移函数/字段到合适类 |
+| 霰弹式修改 | 搬移方法/字段、内联类 |
+
+---
+
+## 5. 重构工作流
+
+### 5.1 小步提交
+
+```
+1. 确保测试全绿
+2. 做一个最小重构（如只提取一个函数）
+3. 跑测试
+4. 绿了 → git commit -m "refactor: extract calculate_totals"
+5. 重复
+```
+
+**每个 commit 只做一件事：** 要么加功能，要么重构，不要混在一起。
+
+### 5.2 童子军规则
+
+> **Leave the campground cleaner than you found it.**  
+> 离开营地时比来时更干净。
+
+每次改代码时，顺手改善附近的一小块 —— 改个命名、提取个函数。
+
+### 5.3 分支策略
+
+```
+feature/add-payment  ← 新功能
+  └─ 其中穿插 refactor/extract-payment-service  ← 独立重构 PR
+```
+
+大型重构用独立分支，小重构直接在功能分支中进行。
+
+---
+
+## 6. 重构与架构演进
+
+重构是**代码级**的改善；当多个模块的边界都不清晰时，可能需要**架构级**调整：
+
+```
+代码重构（本课）          架构重构（learn-architecture/）
+     ↓                           ↓
+ 提取函数/类              拆分微服务
+ 引入接口                 引入消息队列
+ 消除重复                 重新划分模块边界
+```
+
+**信号：** 如果重构后某个模块仍然巨大且频繁变化，考虑架构层面的拆分。
+
+---
+
+## 7. 动手练习
+
+### 练习 1：识别坏味道并重构
+
+```python
+class OrderProcessor:
+    def process(self, order, customer_type, payment_method):
+        total = 0
+        for item in order.items:
+            total += item.price * item.quantity
+
+        if customer_type == "vip":
+            total = total * 0.9
+        elif customer_type == "wholesale":
+            total = total * 0.7
+
+        if payment_method == "credit_card":
+            fee = total * 0.03
+            total += fee
+        elif payment_method == "paypal":
+            fee = total * 0.025
+            total += fee
+
+        if total > 1000:
+            shipping = 0
+        else:
+            shipping = 15
+        total += shipping
+
+        order.total = total
+        order.status = "processed"
+        return order
+```
+
+列出至少 3 个坏味道，并说明你会用什么重构手法。
+
+<details>
+<summary>参考答案</summary>
+
+**坏味道：**
+1. 过长函数 → 提取函数
+2. 大量条件分支 → 策略模式/多态
+3. 魔法数字（0.9, 0.03, 1000, 15）→ 命名常量或配置
+4. 一个方法计算折扣+手续费+运费 → SRP，拆分为独立策略
+
+**重构方向：**
+```python
+class DiscountStrategy(ABC): ...
+class PaymentFeeCalculator(ABC): ...
+class ShippingCalculator: ...
+
+class OrderProcessor:
+    def process(self, order, discount, payment, shipping):
+        subtotal = self._calculate_subtotal(order)
+        total = discount.apply(subtotal)
+        total += payment.calculate_fee(total)
+        total += shipping.calculate(total)
+        order.total = total
+        order.status = "processed"
+        return order
+```
+
+</details>
+
+---
+
+## 8. 自检清单
+
+- [ ] 能区分重构和重写
+- [ ] 理解「测试是重构安全网」
+- [ ] 掌握至少 5 种重构手法并能识别对应坏味道
+- [ ] 知道小步提交和童子军规则
+- [ ] 能判断何时需要代码重构 vs 架构调整
+
+---
+
+## 9. 延伸阅读
+
+- 《重构：改善既有代码的设计（第2版）》— Martin Fowler
+- refactoring.com — Fowler 的重构目录
+- 下一模块：`learn-design-patterns/` — 模式化的重构方案
+- 关联：`learn-fundamentals/02_solid_and_clean_code.md` — 代码坏味道

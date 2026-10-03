@@ -1,0 +1,499 @@
+# 第8课：部署架构与多环境配置
+
+> 前置：第 7 课（逻辑库与隔离）· [`learn-docker`](../learn-docker/) 第 1–3 课  
+> 关联：[`08` → `09`](09_team_collaboration.md) 协作规范 · [`learn-docker/05_practical_deploy.md`](../learn-docker/05_practical_deploy.md)
+
+本课从「本地 `docker compose up`」延伸到**团队真实会遇到的部署问题**：dev / staging / prod 怎么配、Redis 该不该暴露端口、密码与持久化怎么设、和应用怎么连。
+
+---
+
+## 1. 部署层次概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  开发机（你的 laptop）                                        │
+│  docker compose → learn-redis:6379 → FastAPI 连 localhost    │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  预发 / 测试环境（staging）                                   │
+│  独立 Redis 容器/云实例 → 内网 DNS → CI 集成测试              │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  生产环境（prod）                                             │
+│  Redis 主从 + Sentinel / 托管 Redis → 密码 + 内网 + 监控     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**核心原则：** 环境之间用**不同 Redis 实例**隔离；同一实例内用 **Key 前缀 + 逻辑库** 隔离模块。
+
+---
+
+## 2. 本地开发部署（当前 practice 堆栈）
+
+### 2.1 现有 compose 解读
+
+`practice/docker-compose.yml`：
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: learn-redis
+    ports:
+      - "6379:6379"           # 映射到宿主机，方便本地 app 连接
+    volumes:
+      - redis_data:/data      # 数据持久化到 Docker volume
+    command: redis-server --appendonly yes   # 开启 AOF
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+```
+
+| 配置项 | 作用 | 开发环境 | 生产环境 |
+|--------|------|----------|----------|
+| `ports: 6379:6379` | 宿主机可连 | ✅ 方便 | ❌ 不应暴露公网 |
+| `volumes: redis_data` | 重启不丢数据 | ✅ | ✅ 必须 |
+| `--appendonly yes` | AOF 持久化 | ✅ 学习用 | ✅ 按策略选 RDB/AOF |
+| `healthcheck` | compose 依赖等待 | ✅ | ✅ |
+| 无密码 | 零配置启动 | ✅ 仅本地 | ❌ 必须设密码 |
+
+### 2.2 启动与验证
+
+```powershell
+cd E:\code\Projects\learn\learn-tools\learn-redis\practice
+docker compose up -d
+docker compose ps
+docker exec -it learn-redis redis-cli PING    # PONG
+```
+
+**Docker Desktop 显示说明：**
+
+- 父级 **practice** = Compose 项目名（目录名）
+- 子级 **redis** = 服务名
+- 实际容器名 = **learn-redis**（`container_name` 指定）
+
+因此：
+
+```powershell
+docker exec -it learn-redis redis-cli --raw   # ✅
+docker exec -it practice redis-cli            # ❌ 没有叫 practice 的容器
+docker start learn-redis                      # ✅ 启动已存在的容器
+docker compose up -d                          # ✅ 推荐，按 compose 定义启动
+```
+
+### 2.3 应用连接本地 Redis
+
+```python
+# 方式 1：硬编码（仅练习）
+redis.from_url("redis://localhost:6379/0", decode_responses=True)
+
+# 方式 2：环境变量（推荐）
+import os
+redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
+```
+
+`.env`（本地，不提交 Git）：
+
+```bash
+REDIS_URL=redis://localhost:6379/0
+REDIS_KEY_PREFIX=dev:myapp
+APP_ENV=development
+```
+
+---
+
+## 3. 多服务 Compose：Web + Redis
+
+与 [`learn-docker/05_practical_deploy.md`](../learn-docker/05_practical_deploy.md) 对齐的完整示例。
+
+### 3.1 架构
+
+```
+浏览器 → FastAPI(:8000) ──Docker 内部网络──→ redis:6379
+              ↑
+        仅 web 暴露 8000
+        redis 不映射 ports 到宿主机
+```
+
+### 3.2 docker-compose.yml（多服务版）
+
+```yaml
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX:-dev:myapp}
+      - APP_ENV=development
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    # 注意：生产/dev 多服务栈可不写 container_name，避免冲突
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    # 不映射 ports — 仅 Docker 网络内可达
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis_data:
+```
+
+**关键点：**
+
+- 应用用 **`redis://redis:6379`**（服务名作 hostname），不是 `localhost`
+- Redis **不暴露** 6379 到宿主机，减少误连和攻击面
+- 调试时临时加 `ports: ["6379:6379"]` 即可
+
+### 3.3 网络通信原理
+
+```
+web 容器内：
+  ping redis        → 解析到 redis 容器的 IP
+  redis://redis:6379 → Docker Compose 内置 DNS
+
+宿主机：
+  localhost:6379    → 仅当 compose 映射了 ports 才通
+  localhost:8000    → 访问 web
+```
+
+---
+
+## 4. 多环境配置策略
+
+### 4.1 三环境对照表
+
+| 维度 | development | staging | production |
+|------|-------------|---------|------------|
+| Redis 实例 | 本地 Docker / 每人独立 | 团队共享 staging 实例 | 独立 prod 集群 |
+| 连接 URL | `localhost:6379` | `redis-staging.internal:6379` | 内网 / 云托管 endpoint |
+| 密码 | 可无 | 必须 | 必须 + ACL |
+| Key 前缀 | `dev:myapp` 或 `{user}:dev:myapp` | `staging:myapp` | `prod:myapp` 或仅 `myapp` |
+| 持久化 | AOF 可选 | AOF + 备份 | RDB + AOF 策略化 |
+| 端口暴露 | 可映射 6379 | 仅内网 | 仅内网 |
+| FLUSH | 允许（谨慎） | 需权限 | 禁止 |
+
+### 4.2 环境变量分层
+
+```
+.env.example          → 提交 Git，文档化所有变量
+.env.development      → 可选，本地默认
+.env                  → 本地覆盖，gitignore
+CI 环境变量            → staging 流水线注入
+K8s Secret / 云参数     → prod 注入
+```
+
+`.env.example`：
+
+```bash
+# Redis
+REDIS_URL=redis://localhost:6379/0
+REDIS_KEY_PREFIX=dev:myapp
+
+# 应用
+APP_ENV=development
+```
+
+Python 读取：
+
+```python
+import os
+
+REDIS_URL = os.environ["REDIS_URL"]
+KEY_PREFIX = os.environ.get("REDIS_KEY_PREFIX", "myapp")
+
+def build_key(*parts: str) -> str:
+    return ":".join([KEY_PREFIX, *parts])
+
+# build_key("cache", "article", "42")
+# → "dev:myapp:cache:article:42"
+```
+
+### 4.3 12-Factor 原则
+
+> **配置存环境，不存代码。**
+
+```python
+# ❌ 不要这样
+if hostname == "prod-server-01":
+    redis_url = "redis://10.0.1.5:6379"
+
+# ✅ 应该这样
+redis_url = os.environ["REDIS_URL"]
+```
+
+---
+
+## 5. 安全加固（从开发到生产）
+
+### 5.1 设置密码（requirepass）
+
+**redis.conf 或 command 行：**
+
+```yaml
+command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+```
+
+**连接 URL：**
+
+```
+redis://:your_password@redis:6379/0
+```
+
+**应用侧：**
+
+```python
+redis.from_url(os.environ["REDIS_URL"], decode_responses=True)
+```
+
+### 5.2 Redis 6+ ACL（细粒度权限）
+
+```bash
+# 创建只读用户（监控、只读副本查询）
+ACL SETUSER monitor on >monitor_pass ~* +@read +ping +info
+
+# 创建应用用户（业务读写，禁止 FLUSH、CONFIG）
+ACL SETUSER app on >app_pass ~myapp:* +@read +@write +@string +@hash +@list +@set +@sortedset -flushall -flushdb -config
+```
+
+```python
+# ACL 用户名密码 URL
+redis.from_url("redis://app:app_pass@localhost:6379/0")
+```
+
+### 5.3 网络安全
+
+| 做法 | 说明 |
+|------|------|
+| bind 内网 IP | `bind 10.0.0.5` 或 Docker 网络 |
+| 不映射 6379 到 `0.0.0.0` | compose 去掉 ports |
+| TLS | 云托管 Redis 通常自带；自建可用 stunnel |
+| 防火墙 | 仅 app 子网可访问 6379 |
+
+### 5.4 你机器上多个 Redis 的现状
+
+Docker Desktop 可能同时运行：
+
+| 容器 | 用途 | 端口 |
+|------|------|------|
+| `learn-redis` | 本课程 | 6379 |
+| `redis` (Dify) | 其他项目 | 可能 9787 等 |
+| `docker-redis-1` | Dify compose | 内部 |
+
+**协作建议：** 每个学习/项目用独立 compose 项目；连接前确认 `REDIS_URL` 指向正确实例，避免清错库。
+
+---
+
+## 6. 持久化部署配置
+
+### 6.1 RDB vs AOF
+
+| 方式 | 机制 | 优点 | 缺点 |
+|------|------|------|------|
+| **RDB** | 定时快照 dump.rdb | 恢复快、文件紧凑 | 两次快照间可能丢数据 |
+| **AOF** | 追加写命令日志 | 丢数据少（everysec） | 文件大、重写开销 |
+| **混合** | RDB + AOF | 兼顾 | 配置稍复杂 |
+
+当前 practice 使用 **AOF**：
+
+```yaml
+command: redis-server --appendonly yes
+volumes:
+  - redis_data:/data    # /data/appendonly.aof
+```
+
+### 6.2 生产推荐配置片段
+
+```conf
+# redis.conf 要点
+appendonly yes
+appendfsync everysec          # 每秒 fsync，平衡性能与安全
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+save 900 1                    # 15 分钟内至少 1 次变更则 RDB
+save 300 10
+save 60 10000
+
+maxmemory 2gb
+maxmemory-policy allkeys-lru    # 内存满时淘汰策略
+```
+
+Compose 挂载自定义配置：
+
+```yaml
+redis:
+  image: redis:7-alpine
+  volumes:
+    - redis_data:/data
+    - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+  command: redis-server /usr/local/etc/redis/redis.conf
+```
+
+### 6.3 数据卷与备份
+
+```powershell
+# 查看 volume
+docker volume ls | findstr redis
+
+# 备份 AOF/RDB（容器运行中）
+docker exec learn-redis redis-cli BGSAVE
+docker cp learn-redis:/data/dump.rdb ./backup/dump-$(Get-Date -Format yyyyMMdd).rdb
+```
+
+---
+
+## 7. 与应用框架集成
+
+### 7.1 FastAPI（本课程 practice）
+
+改造 `app/main.py` 连接方式：
+
+```python
+import os
+import redis
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "myapp")
+
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+cache = CacheService(redis_client, prefix=f"{KEY_PREFIX}:cache")
+```
+
+### 7.2 Django
+
+```python
+# settings.py
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ["REDIS_URL"],
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "KEY_PREFIX": os.environ.get("REDIS_KEY_PREFIX", "myapp"),
+        },
+    }
+}
+```
+
+### 7.3 Celery
+
+```python
+broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
+result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
+```
+
+**部署注意：** Worker 与 Web 必须能连同一 Redis；staging/prod 的 broker URL 通过环境变量注入，不要写死在代码里。
+
+---
+
+## 8. 健康检查与就绪探针
+
+### 8.1 应用层 /health
+
+practice 已有示例：
+
+```python
+@app.get("/health")
+def health():
+    try:
+        redis_client.set("_health", "1", ex=5)
+        ok = redis_client.get("_health") == "1"
+    except redis.RedisError:
+        ok = False
+    return {"status": "ok" if ok else "degraded", "redis": ok}
+```
+
+### 8.2 Docker healthcheck vs 应用 health
+
+| 层级 | 检查什么 | 用途 |
+|------|----------|------|
+| Docker healthcheck | `redis-cli ping` | compose `depends_on: condition: service_healthy` |
+| 应用 /health | 业务能否读写 Redis | 负载均衡、K8s readiness |
+| 外部监控 | 延迟、内存、连接数 | 告警 |
+
+### 8.3 K8s 探针示例（了解）
+
+```yaml
+readinessProbe:
+  exec:
+    command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+---
+
+## 9. 部署工作流（团队日常）
+
+### 9.1 新人 onboarding
+
+```powershell
+git clone ...
+cd learn-tools/learn-redis/practice
+copy .env.example .env          # 改 REDIS_KEY_PREFIX 为自己的名字
+docker compose up -d
+docker exec -it learn-redis redis-cli PING
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+curl http://localhost:8000/health
+```
+
+### 9.2 更新 Redis 镜像
+
+```powershell
+docker compose pull redis
+docker compose up -d redis
+docker exec learn-redis redis-cli INFO server   # 确认版本
+```
+
+### 9.3 清空本地数据重来
+
+```powershell
+docker compose down -v    # -v 删除 volume，数据清空
+docker compose up -d
+```
+
+---
+
+## 10. 部署 Checklist
+
+### 开发环境
+
+- [ ] `docker compose up -d` 成功，healthcheck 通过
+- [ ] `REDIS_URL` 通过环境变量配置
+- [ ] 应用 `/health` 返回 `redis: true`
+- [ ] 知道容器名是 `learn-redis` 而非 `practice`
+
+### 预发 / 生产
+
+- [ ] Redis 不暴露公网 6379
+- [ ] 密码或 ACL 已配置
+- [ ] 持久化（AOF/RDB）已开启
+- [ ] `maxmemory` 与淘汰策略已设置
+- [ ] 备份与恢复流程已文档化
+- [ ] 监控与告警已接入
+- [ ] dev / staging / prod 使用**不同实例**
+
+---
+
+## 11. 练习
+
+1. 为 `practice/docker-compose.yml` 增加 `REDIS_PASSWORD` 环境变量，并修改连接 URL 验证连通
+2. 写一份 `.env.example`，包含 `REDIS_URL`、`REDIS_KEY_PREFIX`、`APP_ENV`
+3. 去掉 compose 中 redis 的 `ports` 映射，仅通过 `docker exec` 访问，模拟生产网络隔离
+4. 执行 `INFO persistence`，解释 `aof_enabled` 和 `rdb_last_save_time`
+
+---
+
+👉 下一课：[09_team_collaboration.md](09_team_collaboration.md) — 团队协作规范与 Key 治理

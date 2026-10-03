@@ -1,0 +1,84 @@
+# TaskFlow App（贯穿项目）
+
+## 项目定位
+
+TaskFlow App 是 `learn-flutter` 轨道的贯穿项目：用 Flutter 实现任务协作平台的**移动客户端**，对接 [`learn-fullstack`](../../../learn-fullstack/) 的 Django REST Framework 后端。
+
+目标功能：
+
+- 登录/注册（JWT，Access/Refresh 自动刷新）
+- 项目与任务列表、详情、筛选、排序、分页
+- 新建/编辑任务、状态流转
+- 附件拍照/选图上传与下载
+- WebSocket 实时通知
+- 本地数据库缓存与离线同步
+
+## 与各阶段的对应关系
+
+| 阶段 | 在项目里做什么 | 里程碑 |
+|------|---------------|--------|
+| 01 | Dart 语法练习（独立于项目） | — |
+| 02 | `flutter create taskflow_app`，跑通模板 | 可运行的空白 App |
+| 03 | 登录页 + 任务列表页静态 UI | 可切换明暗主题的静态界面 |
+| 04 | Riverpod 状态流：筛选/排序/新建 | 可交互的任务列表（内存数据） |
+| 05 | go_router 路由 + 登录守卫 | 登录跳转与底部导航 |
+| 06 | 本地模型 + Token 存储 + drift 任务表 | 重启不丢数据 |
+| 07 | 对接 DRF：登录、CRUD、上传、WebSocket、离线队列 | 完整联调的 App |
+| 08 | 单测 + Widget 测试 + CI | 核心逻辑覆盖率 ≥80%，CI 绿 |
+| 09 | 拍照上传、推送、多端适配、性能优化 | 真机可用 |
+| 10 | 签名、上架材料、Sentry、发布流水线 | 可安装 APK + 上架文档 |
+
+## 建议目录结构
+
+```text
+taskflow_app/
+├── lib/
+│   ├── main.dart
+│   ├── app/                    # 路由、主题、ProviderScope
+│   ├── core/
+│   │   ├── network/            # dio、拦截器、异常
+│   │   ├── storage/            # token、偏好、数据库
+│   │   └── widgets/            # 通用组件
+│   └── features/
+│       ├── auth/
+│       │   ├── data/           # AuthApi、TokenStorage
+│       │   ├── domain/         # AuthRepository、User
+│       │   └── presentation/   # 登录页、AuthNotifier
+│       └── tasks/
+│           ├── data/           # TaskApi、TaskDao、本地表
+│           ├── domain/         # Task、TaskRepository
+│           └── presentation/   # 列表/详情/新建页、Notifier
+├── test/
+├── integration_test/
+└── docs/
+    └── ADR-001-riverpod.md     # 选型记录
+```
+
+## 启动方式
+
+### 1. 后端（来自 learn-fullstack）
+
+```powershell
+cd learn-fullstack\project\taskflow
+docker compose up -d            # PostgreSQL + Redis
+# 启动 Django 开发服务器并迁移数据库
+```
+
+### 2. App
+
+```powershell
+cd learn-flutter\project\taskflow_app
+flutter pub get
+flutter run -d windows           # 或 android / chrome
+```
+
+### 3. 切换数据源
+
+开发早期使用 Mock Repository（`useMockApiProvider = true`），联调时切换为真实 API。
+
+## 验收里程碑
+
+- **M1（Stage 03 后）**：静态 UI 完成，明暗主题可切换
+- **M2（Stage 05 后）**：登录守卫 + 底部导航 + 内存数据 CRUD
+- **M3（Stage 07 后）**：真实后端联调，离线可用
+- **M4（Stage 10 后）**：签名 APK + 上架材料 + 发布流水线

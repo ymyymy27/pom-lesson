@@ -1,0 +1,7 @@
+Neovim is a powerful text editor.
+It is built on top of Vim.
+The community has created thousands of plugins.
+You should "Learn" Neovim step by step.
+Practice makes perfect every single day.
+The journey is challenging but rewarding.
+Keep trying and never give up.

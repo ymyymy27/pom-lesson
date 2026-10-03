@@ -1,0 +1,157 @@
+# 第2课：图数据建模
+
+> 前置：第 1 课、[`00_neo4j_syntax.md`](00_neo4j_syntax.md)  
+> 环境：`practice/seed_demo_graph.py` 演示数据
+
+本课聚焦**如何把业务概念映射为 Neo4j 模型**——建模质量决定查询性能与维护成本。
+
+---
+
+## 1. 建模流程
+
+```
+业务问题 → 识别实体(Label) → 识别关系(TYPE) → 属性放哪 → 索引/约束 → 验证查询
+```
+
+**示例问题：**「查询某员工参与的项目及其部门负责人」
+
+→ 需要 `Person`、`Project`、`Department` 节点，以及 `WORKS_ON`、`MEMBER_OF`、`REPORTS_TO` 关系。
+
+---
+
+## 2. Label 设计原则
+
+| 原则 | 说明 | 示例 |
+|------|------|------|
+| 名词单数 | Label 用单数 | `Person` 非 `People` |
+| 稳定类型 | 不随业务状态变 Label | 用 `status` 属性，非 `:ActivePerson` |
+| 多标签 sparingly | 表继承/角色叠加 | `:Person:Employee` |
+| 必有业务主键 | 跨系统对齐 | `id: 'person_001'` + UNIQUE 约束 |
+
+```cypher
+// ✅ 状态用属性
+(p:Person {status: 'active'})
+
+// ❌ 状态变 Label（查询需 UNION，难维护）
+(p:ActivePerson)
+```
+
+---
+
+## 3. 关系 vs 属性：何时用边？
+
+| 场景 | 用关系 | 用属性 |
+|------|--------|--------|
+| 连接两个实体 | ✅ `Person -[:WORKS_AT]-> Company` | — |
+| 实体自身简单字段 | — | ✅ `Person.email` |
+| 关系有元数据 | ✅ `WORKS_ON {role, since}` | 属性过多时考虑中间节点 |
+| 需被其他实体引用 | 升格为节点（见 §4） | — |
+
+**关系属性适用：** 少量、不常单独查询的字段（`since`、`weight`）。
+
+---
+
+## 4. 中间节点模式（Reification）
+
+关系本身复杂、或关系需要被关联时，**升格为节点**：
+
+```
+// ❌ 关系属性过多
+(p)-[:WORKS_ON {role, start_date, end_date, allocation_pct, ...}]->(proj)
+
+// ✅ 中间节点 Assignment
+(p)-[:HAS_ASSIGNMENT]->(a:Assignment {role, start_date})-[:ON_PROJECT]->(proj)
+```
+
+**适用：** employment、membership、transaction、rating 等「关系也是一等公民」的场景。
+
+---
+
+## 5. 星型 vs 链式
+
+```
+星型（推荐：以中心实体查询）       链式（层级组织）
+      Department                      CEO
+         ↑                              ↑
+    Person → Project              VP → Director → Manager
+```
+
+| 模式 | 适用 | 查询示例 |
+|------|------|----------|
+| 星型 | 从 Person 查项目、部门 | `(p)-[:WORKS_ON]->(proj)` |
+| 链式 | 组织汇报、分类树 | `(p)-[:REPORTS_TO*]->(ceo)` |
+
+**链式注意：** 层级深度用可变长度路径 `*1..N`，N 不宜过大（生产建议 ≤ 4）。
+
+---
+
+## 6. 时间有效性
+
+关系或属性随时间变化时，在关系上记录有效期：
+
+```cypher
+(p)-[:WORKS_AT {from: date('2020-01-01'), to: null}]->(c:Company)
+
+// 查询「2023 年在职」
+MATCH (p)-[r:WORKS_AT]->(c)
+WHERE r.from <= date('2023-12-31')
+  AND (r.to IS NULL OR r.to >= date('2023-01-01'))
+RETURN p, c
+```
+
+**替代方案：** 历史记录用中间节点 + `valid_from` / `valid_to`，当前态单独一条「当前」边。
+
+---
+
+## 7. 反模式（Avoid）
+
+| 反模式 | 问题 | 改进 |
+|--------|------|------|
+| 超级节点 | 一个节点连百万边，遍历慢 | 分页、中间层、时间分片 |
+| 属性图当 JSON _blob | 大 JSON 无法索引 | 拆节点或外存 + 引用 |
+| 无业务主键 | MERGE 无法幂等 | `id` + UNIQUE 约束 |
+| 关系类型爆炸 | 每种细微差别一种 TYPE | 用关系属性或中间节点 |
+| 重复存完整对象 | 与 RDB 双写不一致 | 存引用 id，详情查主库 |
+
+---
+
+## 8. 演示 Schema（本课程 practice）
+
+```
+Company ← BELONGS_TO ← Department ← MEMBER_OF ← Person
+                                                      │
+                                              REPORTS_TO（层级）
+                                                      │
+Person ── WORKS_ON ──→ Project ← OWNED_BY ── Person
+```
+
+| Label | 关键属性 | 关系 |
+|-------|----------|------|
+| `Company` | id, name | ← BELONGS_TO |
+| `Department` | id, name | → BELONGS_TO, ← MEMBER_OF |
+| `Person` | id, name, email, title, status | → MEMBER_OF, REPORTS_TO, WORKS_ON |
+| `Project` | id, name, status | ← WORKS_ON, ← OWNED_BY |
+
+---
+
+## 9. 动手练习
+
+1. 在 Browser 中 `:schema` 查看 seed 数据的 Label 与关系类型
+2. 为 `Project` 添加 `deadline` 属性，思考放节点还是关系
+3. 设计：若员工可兼多个部门，模型如何调整？（提示：中间节点 `Membership`）
+4. 画出你业务场景的一张草图（3–5 个 Label）
+
+---
+
+## 10. 自检清单
+
+- [ ] 能区分 Label、关系类型、属性的职责
+- [ ] 知道何时用中间节点代替复杂关系
+- [ ] 理解星型与链式查询的差异
+- [ ] 能识别超级节点、无业务主键等反模式
+
+---
+
+## 下一课
+
+[`03_cypher_crud.md`](03_cypher_crud.md) — Cypher 增删改查

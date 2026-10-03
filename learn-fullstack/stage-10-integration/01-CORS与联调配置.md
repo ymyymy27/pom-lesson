@@ -1,0 +1,238 @@
+# 第 01 节：CORS 与联调配置
+
+## 一、什么是 CORS？
+
+CORS（Cross-Origin Resource Sharing，跨域资源共享）是浏览器的安全机制。当前端和后端不在同一个 **源**（协议 + 域名 + 端口）时，浏览器会阻止跨域请求。
+
+```
+前端：http://localhost:3000   (Vite 开发服务器)
+后端：http://localhost:8000   (Django 开发服务器)
+
+端口不同 → 跨域 → 浏览器阻止请求
+```
+
+### 1.1 CORS 请求流程
+
+```
+简单请求（GET / POST with simple headers）：
+浏览器 → 直接发请求，带 Origin 头 → 服务器返回 Access-Control-Allow-Origin → 浏览器放行
+
+预检请求（PUT / DELETE / JSON Content-Type 等）：
+浏览器 → 先发 OPTIONS 预检请求 → 服务器返回允许的方法/头 → 浏览器再发真正请求
+```
+
+---
+
+## 二、后端 CORS 配置（Django）
+
+```bash
+pip install django-cors-headers
+```
+
+```python
+# config/settings.py
+INSTALLED_APPS = [
+    ...
+    'corsheaders',
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',          # 必须在 CommonMiddleware 之前
+    'django.middleware.common.CommonMiddleware',
+    ...
+]
+
+# ==================== 开发环境 CORS ====================
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+]
+
+# 允许携带 Cookie/认证信息
+CORS_ALLOW_CREDENTIALS = True
+
+# 允许的请求头
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# 允许的方法
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+```
+
+---
+
+## 三、前端代理配置（开发环境推荐）
+
+开发时用 Vite 代理转发 API 请求，避免跨域问题。
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+    plugins: [react()],
+    resolve: {
+        alias: { '@': path.resolve(__dirname, 'src') },
+    },
+    server: {
+        port: 3000,
+        proxy: {
+            '/api': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+            },
+            '/media': {
+                target: 'http://localhost:8000',
+                changeOrigin: true,
+            },
+        },
+    },
+});
+```
+
+```
+代理后的请求路径：
+前端发 → GET /api/v1/tasks/
+Vite 代理 → GET http://localhost:8000/api/v1/tasks/
+同源，不触发 CORS
+```
+
+---
+
+## 四、环境变量
+
+### 4.1 前端环境变量
+
+```bash
+# .env.development
+VITE_API_BASE_URL=/api/v1
+VITE_APP_NAME=TaskFlow
+
+# .env.production
+VITE_API_BASE_URL=https://api.taskflow.com/api/v1
+VITE_APP_NAME=TaskFlow
+```
+
+```typescript
+// src/services/api.ts
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: import.meta.env.VITE_API_BASE_URL,
+    timeout: 15000,
+});
+
+export default api;
+```
+
+### 4.2 后端环境变量
+
+```bash
+# .env
+SECRET_KEY=your-secret-key-here
+DEBUG=True
+DATABASE_URL=postgres://user:pass@localhost:5432/taskflow
+REDIS_URL=redis://localhost:6379/0
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+```python
+# config/settings.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-key')
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+```
+
+```bash
+pip install python-dotenv
+```
+
+---
+
+## 五、联调检查清单
+
+```
+✅ 后端
+  □ Django 服务运行在 http://localhost:8000
+  □ CORS 配置正确（允许前端源）
+  □ API 端点可通过浏览器/curl 正常访问
+  □ JWT 认证配置正确
+  □ media 文件可访问
+
+✅ 前端
+  □ Vite 代理配置正确（/api → localhost:8000）
+  □ Axios baseURL 使用环境变量
+  □ 请求拦截器正确附加 Token
+  □ 响应拦截器处理 401 刷新 Token
+  □ 错误处理覆盖网络错误和 HTTP 错误
+
+✅ 联调
+  □ 登录流程：前端 → 后端 → 返回 Token → 存储 → 携带 Token 请求
+  □ CRUD 流程：创建/读取/更新/删除都正常
+  □ 分页/过滤/搜索：查询参数正确传递
+  □ 文件上传：头像/附件正常上传和显示
+```
+
+---
+
+## 六、常见问题排查
+
+```
+问题：请求被 CORS 拦截
+→ 检查 django-cors-headers 是否安装并配置
+→ 检查 CORS_ALLOWED_ORIGINS 是否包含前端地址
+→ 检查 CorsMiddleware 是否在 CommonMiddleware 之前
+
+问题：前端请求 404
+→ 检查 Vite proxy 配置
+→ 检查 Django urls.py 路由
+→ 检查 API URL 末尾是否需要 /（Django 默认需要）
+
+问题：Token 不生效
+→ 检查请求头格式：Authorization: Bearer <token>
+→ 检查 Token 是否过期
+→ 检查 DEFAULT_AUTHENTICATION_CLASSES 配置
+
+问题：POST/PUT 请求 403
+→ 开发环境检查 CSRF 设置
+→ 确认 Content-Type 为 application/json
+→ JWT 认证不需要 CSRF Token
+```
+
+---
+
+## 七、练习
+
+1. 配置 django-cors-headers，允许前端 localhost:3000 访问
+2. 配置 Vite 代理，将 `/api` 转发到后端
+3. 设置前后端环境变量，使用 `.env` 文件管理配置
+4. 完成完整的登录联调：前端登录 → 获取 Token → 请求 API
+5. 完成任务 CRUD 联调：创建/列表/详情/更新/删除

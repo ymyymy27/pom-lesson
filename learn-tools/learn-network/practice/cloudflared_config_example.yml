@@ -1,0 +1,10 @@
+# 示例：~/.cloudflared/config.yml（命名隧道）
+# 替换隧道名、凭据文件路径、域名后使用
+
+tunnel: my-tunnel
+credentials-file: /Users/you/.cloudflared/my-tunnel.json
+
+ingress:
+  - hostname: dev.example.com
+    service: http://localhost:3000
+  - service: http_status:404

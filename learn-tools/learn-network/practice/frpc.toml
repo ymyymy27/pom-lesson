@@ -1,0 +1,14 @@
+# 示例：frp 客户端配置 frpc.toml（放在本地电脑上）
+
+serverAddr = "1.2.3.4"
+serverPort = 7000
+auth.method = "token"
+auth.token = "换成随机长字符串"
+
+# 把本地 3000 端口发布到服务器的 8080 端口
+[[proxies]]
+name = "local-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3000
+remotePort = 8080

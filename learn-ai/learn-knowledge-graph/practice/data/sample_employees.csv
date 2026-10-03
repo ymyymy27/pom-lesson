@@ -1,0 +1,4 @@
+employee_id,name,email,dept_id,dept_name,title
+001,张三,zhangsan@example.com,D01,研发一部,高级工程师
+002,李四,lisi@example.com,D01,研发一部,技术负责人
+003,王五,wangwu@example.com,D02,产品部,产品经理
