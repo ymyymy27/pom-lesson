@@ -1126,4 +1126,4 @@ docker compose down -v
 
 **learn-docker 课程完成！** 🎉
 
-回到总目录：[learn-tools README](../../../99-历史归档/旧版课程说明/工具旧导航/课程说明.md)
+回到总目录：[learn-tools README](../../../05-公共资源/课程说明.md)

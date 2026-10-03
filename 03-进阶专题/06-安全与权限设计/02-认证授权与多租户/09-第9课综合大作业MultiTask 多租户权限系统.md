@@ -71,4 +71,4 @@ Python 3.12 + FastAPI + PostgreSQL + Redis
 
 项目目录 + README（架构图、API 文档、验收结果）+ 测试报告。
 
-完成后可以串联 `99-历史归档/旧版课程说明/Web旧导航/`，用 Django + React 把同一套权限体系做成完整应用。
+完成后可以串联 `02-方向选修/01-Web与后端开发/`，用 Django + React 把同一套权限体系做成完整应用。

@@ -46,3 +46,8 @@ tasks.json
 .dart_tool/
 .flutter-plugins-dependencies
 build/
+checkpoints/
+saved_models/
+*.pt
+*.pth
+99-历史归档/简化GPT实验/data/

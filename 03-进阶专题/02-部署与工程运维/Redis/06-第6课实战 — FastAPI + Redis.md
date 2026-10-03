@@ -167,8 +167,8 @@ curl -X POST http://localhost:8000/articles/ \
 
 | 方向 | 课程 |
 |------|------|
-| Django + Celery 集成 | `99-历史归档/旧版课程说明/Web旧导航/stage-06-celery-cache` |
-| 性能监控与安全 | `99-历史归档/旧版课程说明/Web旧导航/stage-14-optimization` |
+| Django + Celery 集成 | `02-方向选修/01-Web与后端开发/参考资料/06-Celery与缓存` |
+| 性能监控与安全 | `03-进阶专题/02-部署与工程运维/14-安全与性能` |
 | 系统设计案例 | `03-进阶专题/01-软件设计与架构/learn-system-design` |
 | 容器化部署 Redis | `learn-docker/05_practical_deploy.md` |
 

@@ -1,4 +1,4 @@
-"""核对旧文件去向与保留资源的 SHA256，避免迁移丢失文件。"""
+"""核对原文件的保留去向与已清理记录，避免丢失或混回冗余产物。"""
 import csv
 import hashlib
 from pathlib import Path
@@ -20,11 +20,20 @@ def check():
             errors.append(f"duplicate migration: {original}")
         original_paths.add(original)
         targets.add(target)
-        if not target.is_relative_to(ROOT) or not target.is_file():
-            errors.append(f"missing or external target: {original}")
-            continue
         if not re.fullmatch(r"[0-9a-f]{64}", row["原始SHA256"]):
             errors.append(f"invalid original digest: {original}")
+        if not target.is_relative_to(ROOT):
+            errors.append(f"external target: {original}")
+            continue
+        if row["动作"] == "清理":
+            if not row.get("清理原因") or not row.get("清理日期") or not row["验证结果"].startswith("已清理"):
+                errors.append(f"incomplete cleanup record: {original}")
+            if target.exists():
+                errors.append(f"cleaned file still exists: {original}")
+            continue
+        if not target.is_file():
+            errors.append(f"missing target: {original}")
+            continue
         if row["验证结果"] == "待统一检查":
             errors.append(f"unverified migration: {original}")
         if row["验证结果"].startswith("原内容保留"):
