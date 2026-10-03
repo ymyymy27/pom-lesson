@@ -22,16 +22,15 @@ jobs:
       - run: python "工具脚本/验证课程.py" --django-python python
   flutter:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: 02-方向选修/04-Flutter移动应用开发/起步工程
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.6'
           cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - run: flutter build web
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 在兼容目录验证Flutter起步工程
+        run: python "工具脚本/验证Flutter起步工程.py"
