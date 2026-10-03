@@ -1,0 +1,1024 @@
+{
+  "version": 1,
+  "title": "零基础计算机课程",
+  "total_basic_hours": 96,
+  "courses": [
+    {
+      "id": "B01",
+      "title": "保存并运行第一个程序",
+      "path": "01-基础必修/00-入门准备/01-保存并运行第一个程序/讲义.md",
+      "level": "基础必修",
+      "hours": 1.5,
+      "prerequisites": [],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 1
+    },
+    {
+      "id": "B02",
+      "title": "分清文件路径与当前目录",
+      "path": "01-基础必修/00-入门准备/02-分清文件路径与当前目录/讲义.md",
+      "level": "基础必修",
+      "hours": 1.5,
+      "prerequisites": [
+        "B01"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 1
+    },
+    {
+      "id": "B03",
+      "title": "用输入处理输出描述问题",
+      "path": "01-基础必修/01-程序与计算思维/01-用输入处理输出描述问题/讲义.md",
+      "level": "基础必修",
+      "hours": 1.5,
+      "prerequisites": [
+        "B02"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 1
+    },
+    {
+      "id": "B04",
+      "title": "逐行跟踪变量变化",
+      "path": "01-基础必修/01-程序与计算思维/02-逐行跟踪变量变化/讲义.md",
+      "level": "基础必修",
+      "hours": 1.5,
+      "prerequisites": [
+        "B03"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 1
+    },
+    {
+      "id": "B05",
+      "title": "数字字符串与类型转换",
+      "path": "01-基础必修/02-Python编程基础/01-数字字符串与类型转换/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B04"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 2
+    },
+    {
+      "id": "B06",
+      "title": "用条件处理不同情况",
+      "path": "01-基础必修/02-Python编程基础/02-用条件处理不同情况/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B05"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 2
+    },
+    {
+      "id": "B07",
+      "title": "用循环处理重复任务",
+      "path": "01-基础必修/02-Python编程基础/03-用循环处理重复任务/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B06"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 3
+    },
+    {
+      "id": "B08",
+      "title": "用列表保存任务",
+      "path": "01-基础必修/02-Python编程基础/04-用列表保存任务/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B07"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 3
+    },
+    {
+      "id": "B09",
+      "title": "用字典描述一条记录",
+      "path": "01-基础必修/02-Python编程基础/05-用字典描述一条记录/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B08"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 4
+    },
+    {
+      "id": "B10",
+      "title": "组合条件循环与容器",
+      "path": "01-基础必修/02-Python编程基础/06-组合条件循环与容器/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B09"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 4
+    },
+    {
+      "id": "B11",
+      "title": "函数的参数与返回值",
+      "path": "01-基础必修/03-函数与程序组织/01-函数的参数与返回值/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B10"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 5
+    },
+    {
+      "id": "B12",
+      "title": "把一个问题拆成小函数",
+      "path": "01-基础必修/03-函数与程序组织/02-把一个问题拆成小函数/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B11"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 5
+    },
+    {
+      "id": "B13",
+      "title": "用断言检查函数结果",
+      "path": "01-基础必修/03-函数与程序组织/03-用断言检查函数结果/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B12"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 6
+    },
+    {
+      "id": "B14",
+      "title": "模块与项目环境",
+      "path": "01-基础必修/03-函数与程序组织/04-模块与项目环境/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B13"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 6
+    },
+    {
+      "id": "B15",
+      "title": "用JSON保存与恢复数据",
+      "path": "01-基础必修/04-文件处理与调试/01-用JSON保存与恢复数据/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B14"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 7
+    },
+    {
+      "id": "B16",
+      "title": "区分文件不存在与格式错误",
+      "path": "01-基础必修/04-文件处理与调试/02-区分文件不存在与格式错误/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B15"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 7
+    },
+    {
+      "id": "B17",
+      "title": "用证据定位程序错误",
+      "path": "01-基础必修/04-文件处理与调试/03-用证据定位程序错误/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B16"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 8
+    },
+    {
+      "id": "B18",
+      "title": "明确函数与数据的边界",
+      "path": "01-基础必修/04-文件处理与调试/04-明确函数与数据的边界/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B17"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 8
+    },
+    {
+      "id": "B19",
+      "title": "选择列表还是字典",
+      "path": "01-基础必修/05-数据结构与算法入门/01-选择列表还是字典/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B18"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 9
+    },
+    {
+      "id": "B20",
+      "title": "用栈和队列表达顺序",
+      "path": "01-基础必修/05-数据结构与算法入门/02-用栈和队列表达顺序/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B19"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 9
+    },
+    {
+      "id": "B21",
+      "title": "查找算法与循环不变量",
+      "path": "01-基础必修/05-数据结构与算法入门/03-查找算法与循环不变量/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B20"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 10
+    },
+    {
+      "id": "B22",
+      "title": "排序与复杂度实验",
+      "path": "01-基础必修/05-数据结构与算法入门/04-排序与复杂度实验/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B21"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 10
+    },
+    {
+      "id": "B23",
+      "title": "二进制字符与文件",
+      "path": "01-基础必修/06-计算机系统与网络入门/01-二进制字符与文件/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B22"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 11
+    },
+    {
+      "id": "B24",
+      "title": "程序进程与持久化",
+      "path": "01-基础必修/06-计算机系统与网络入门/02-程序进程与持久化/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B23"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 11
+    },
+    {
+      "id": "B25",
+      "title": "一次HTTP请求发生了什么",
+      "path": "01-基础必修/06-计算机系统与网络入门/03-一次HTTP请求发生了什么/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B24"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 12
+    },
+    {
+      "id": "B26",
+      "title": "关系表主键与约束",
+      "path": "01-基础必修/07-SQL与数据库基础/01-关系表主键与约束/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B25"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 13
+    },
+    {
+      "id": "B27",
+      "title": "用SQL增删改查",
+      "path": "01-基础必修/07-SQL与数据库基础/02-用SQL增删改查/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B26"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 13
+    },
+    {
+      "id": "B28",
+      "title": "统计与联表查询",
+      "path": "01-基础必修/07-SQL与数据库基础/03-统计与联表查询/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B27"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 14
+    },
+    {
+      "id": "B29",
+      "title": "事务与失败回滚",
+      "path": "01-基础必修/07-SQL与数据库基础/04-事务与失败回滚/讲义.md",
+      "level": "基础必修",
+      "hours": 3.0,
+      "prerequisites": [
+        "B28"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 14
+    },
+    {
+      "id": "B30",
+      "title": "用Git记录可解释的修改",
+      "path": "01-基础必修/08-Git与项目协作/01-用Git记录可解释的修改/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B29"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 15
+    },
+    {
+      "id": "B31",
+      "title": "分支协作与处理冲突",
+      "path": "01-基础必修/08-Git与项目协作/02-分支协作与处理冲突/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B30"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 15
+    },
+    {
+      "id": "B32",
+      "title": "演示项目与复盘",
+      "path": "01-基础必修/08-Git与项目协作/03-演示项目与复盘/讲义.md",
+      "level": "基础必修",
+      "hours": 4.0,
+      "prerequisites": [
+        "B31"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "示例运行",
+        "参考答案输出"
+      ],
+      "week": 16
+    },
+    {
+      "id": "W01",
+      "title": "Web基础与对象桥接",
+      "path": "02-方向选修/01-Web与后端开发/01-Web基础与对象桥接.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "B32"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "W02",
+      "title": "Django路由视图与模板",
+      "path": "02-方向选修/01-Web与后端开发/02-Django路由视图与模板.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "W01"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "W03",
+      "title": "ORM与输入校验",
+      "path": "02-方向选修/01-Web与后端开发/03-ORM与输入校验.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "W02"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "W04",
+      "title": "JSON接口与页面联调",
+      "path": "02-方向选修/01-Web与后端开发/04-JSON接口与页面联调.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "W03"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "W05",
+      "title": "测试错误处理与基础安全",
+      "path": "02-方向选修/01-Web与后端开发/05-测试错误处理与基础安全.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "W04"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "W06",
+      "title": "项目交付与技术取舍",
+      "path": "02-方向选修/01-Web与后端开发/06-项目交付与技术取舍.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "W05"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A01",
+      "title": "模型能力限制与结构化结果",
+      "path": "02-方向选修/02-AI应用/01-模型能力限制与结构化结果.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "B32"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A02",
+      "title": "关键词检索与来源",
+      "path": "02-方向选修/02-AI应用/02-关键词检索与来源.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "A01"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A03",
+      "title": "向量表示与相似度",
+      "path": "02-方向选修/02-AI应用/03-向量表示与相似度.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "A02"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A04",
+      "title": "上下文引用与生成接口",
+      "path": "02-方向选修/02-AI应用/04-上下文引用与生成接口.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "A03"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A05",
+      "title": "固定问题集与评估",
+      "path": "02-方向选修/02-AI应用/05-固定问题集与评估.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "A04"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "A06",
+      "title": "问答助手交付",
+      "path": "02-方向选修/02-AI应用/06-问答助手交付.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "A05"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D01",
+      "title": "CSV数据与质量检查",
+      "path": "02-方向选修/03-数据分析与机器学习/01-CSV数据与质量检查.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "B32"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D02",
+      "title": "统计图表与结论边界",
+      "path": "02-方向选修/03-数据分析与机器学习/02-统计图表与结论边界.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "D01"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D03",
+      "title": "数学桥接与数据划分",
+      "path": "02-方向选修/03-数据分析与机器学习/03-数学桥接与数据划分.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "D02"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D04",
+      "title": "建立简单分类基线",
+      "path": "02-方向选修/03-数据分析与机器学习/04-建立简单分类基线.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "D03"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D05",
+      "title": "评价指标与错误分析",
+      "path": "02-方向选修/03-数据分析与机器学习/05-评价指标与错误分析.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "D04"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "D06",
+      "title": "分析项目复现与表达",
+      "path": "02-方向选修/03-数据分析与机器学习/06-分析项目复现与表达.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "D05"
+      ],
+      "status": "可试学",
+      "verified": "2026-10-03",
+      "checks": [
+        "项目运行与自动检查"
+      ]
+    },
+    {
+      "id": "F01",
+      "title": "Dart语法与对象桥接",
+      "path": "02-方向选修/04-Flutter移动应用开发/01-Dart语法与对象桥接.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "B32"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "F02",
+      "title": "Widget布局与交互",
+      "path": "02-方向选修/04-Flutter移动应用开发/02-Widget布局与交互.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "F01"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "F03",
+      "title": "状态与任务操作",
+      "path": "02-方向选修/04-Flutter移动应用开发/03-状态与任务操作.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "F02"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "F04",
+      "title": "页面切换与数据边界",
+      "path": "02-方向选修/04-Flutter移动应用开发/04-页面切换与数据边界.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "F03"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "F05",
+      "title": "本地存储与接口替换",
+      "path": "02-方向选修/04-Flutter移动应用开发/05-本地存储与接口替换.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "F04"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "F06",
+      "title": "Widget测试与应用演示",
+      "path": "02-方向选修/04-Flutter移动应用开发/06-Widget测试与应用演示.md",
+      "level": "方向选修",
+      "hours": 12,
+      "prerequisites": [
+        "F05"
+      ],
+      "status": "待SDK验证",
+      "verified": null,
+      "checks": []
+    },
+    {
+      "id": "T01",
+      "title": "软件设计与架构",
+      "path": "03-进阶专题/01-软件设计与架构/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "W06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T02",
+      "title": "部署与工程运维",
+      "path": "03-进阶专题/02-部署与工程运维/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "W06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T03",
+      "title": "信息检索与知识图谱",
+      "path": "03-进阶专题/03-信息检索与知识图谱/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "A06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T04",
+      "title": "Agent框架与MCP",
+      "path": "03-进阶专题/04-Agent框架与MCP/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "A06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T05",
+      "title": "模型训练与推理部署",
+      "path": "03-进阶专题/05-模型训练与推理部署/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "D06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T06",
+      "title": "安全与权限设计",
+      "path": "03-进阶专题/06-安全与权限设计/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "W06"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    },
+    {
+      "id": "T07",
+      "title": "产品思维与职业发展",
+      "path": "03-进阶专题/07-产品思维与职业发展/课程说明.md",
+      "level": "进阶专题",
+      "hours": null,
+      "prerequisites": [
+        "B32"
+      ],
+      "status": "参考资料",
+      "verified": null,
+      "checks": [
+        "目录与链接检查"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "direction": "W",
+      "hours": 24,
+      "path": "04-项目实践/01-TaskFlow校园任务助手/课程说明.md"
+    },
+    {
+      "direction": "A",
+      "hours": 24,
+      "path": "04-项目实践/02-RAG课程资料问答助手/课程说明.md"
+    },
+    {
+      "direction": "D",
+      "hours": 24,
+      "path": "04-项目实践/03-校园数据分析/课程说明.md"
+    },
+    {
+      "direction": "F",
+      "hours": 24,
+      "path": "02-方向选修/04-Flutter移动应用开发/起步工程/课程说明.md"
+    }
+  ]
+}

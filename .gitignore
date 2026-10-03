@@ -36,3 +36,13 @@ Thumbs.db
 # Logs & temp
 *.log
 tmp/
+
+# Student work and generated project data
+个人作业/
+*.sqlite3
+*.sqlite3-journal
+tasks.json
+*.tmp
+.dart_tool/
+.flutter-plugins-dependencies
+build/

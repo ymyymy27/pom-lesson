@@ -1,24 +1,16 @@
 {
-  // Cursor AI 补全
-  "cursor.autocomplete.enabled": false,
-  "cursor.cpp.enablePartialAccepts": false,
-  "cursor.prediction.enabled": false,
-
-  // 行内建议（灰色幽灵文本）
-  "editor.inlineSuggest.enabled": false,
-  "editor.codeLens": false,
-
-  // VSCode 内置代码建议
-  "editor.suggest.enabled": false,
   "editor.quickSuggestions": {
-    "other": "off",
+    "other": "on",
     "comments": "off",
     "strings": "off"
   },
-  "editor.parameterHints.enabled": false,
-  "editor.suggestOnTriggerCharacters": false,
-  "editor.acceptSuggestionOnCommitCharacter": false,
-  "editor.wordBasedSuggestions": "off",
-  "editor.tabCompletion": "off",
-  "editor.hover.enabled": "off"
+  "editor.parameterHints.enabled": true,
+  "editor.suggestOnTriggerCharacters": true,
+  "editor.hover.enabled": true,
+  "editor.wordBasedSuggestions": "currentDocument",
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "files.encoding": "utf8",
+  "python.analysis.typeCheckingMode": "basic",
+  "editor.inlineSuggest.enabled": false
 }

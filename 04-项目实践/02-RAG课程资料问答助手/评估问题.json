@@ -1,0 +1,26 @@
+[
+  {
+    "question": "如何运行Python程序",
+    "expected": "课文-01"
+  },
+  {
+    "question": "Git提交前检查什么",
+    "expected": "课文-02"
+  },
+  {
+    "question": "SQLite问号参数",
+    "expected": "课文-03"
+  },
+  {
+    "question": "虚拟环境隔离依赖",
+    "expected": "课文-04"
+  },
+  {
+    "question": "调试先做什么",
+    "expected": "课文-05"
+  },
+  {
+    "question": "火星公转周期",
+    "expected": null
+  }
+]

@@ -1,0 +1,13 @@
+练习分钟,通过,划分
+10,0,train
+15,0,train
+20,0,train
+25,0,train
+30,1,train
+35,1,train
+40,1,train
+50,1,train
+12,0,test
+22,1,test
+32,0,test
+45,1,test
